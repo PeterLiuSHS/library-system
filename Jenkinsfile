@@ -17,6 +17,14 @@ pipeline {
             }
         }
 
+        stage('Build book-api') {
+            steps {
+                dir('book-api') {
+                    bat 'mvn clean package'
+                }
+            }
+        }
+
         stage('Build loan-api') {
             steps {
                 dir('loan-api') {
