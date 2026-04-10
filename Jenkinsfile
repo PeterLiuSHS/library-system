@@ -33,6 +33,20 @@ pipeline {
             }
         }
 
+        stage('Run Tests') {
+            steps {
+                dir('user-api') {
+                    bat 'mvn test'
+                }
+                dir('book-api') {
+                    bat 'mvn test'
+                }
+                dir('loan-api') {
+                    bat 'mvn test'
+                }
+            }
+        }
+
         stage('Start System') {
             steps {
                 bat 'docker compose up -d --build'
