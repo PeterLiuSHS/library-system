@@ -1,6 +1,8 @@
 package com.kexun.user.service.impl;
 
+import com.kexun.user.client.LoanClient;
 import com.kexun.user.dto.UserUpdateRequest;
+import com.kexun.user.exception.ConflictException;
 import com.kexun.user.exception.ResourceNotFoundException;
 import com.kexun.user.model.User;
 import com.kexun.user.repository.UserRepository;
@@ -15,9 +17,11 @@ import java.time.LocalDateTime;
 @Service
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
+    private final LoanClient loanClient;
 
-    public UserServiceImpl(UserRepository userRepository) {
+    public UserServiceImpl(UserRepository userRepository, LoanClient loanClient) {
         this.userRepository = userRepository;
+        this.loanClient = loanClient;
     }
 
     @Override
@@ -27,7 +31,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User getById(Long id){
-        return userRepository.findById(id)
+        return userRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(()-> new ResourceNotFoundException("User " + id + " not found"));
     }
 
@@ -36,10 +40,10 @@ public class UserServiceImpl implements UserService {
         Pageable pageable = PageRequest.of(page, size);
 
         if (search == null || search.isBlank()) {
-            return userRepository.findAll(pageable);
+            return userRepository.findByDeletedFalse(pageable);
         }
 
-        return userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+        return userRepository.findByDeletedFalseAndNameContainingIgnoreCaseOrDeletedFalseAndEmailContainingIgnoreCase(
                 search,
                 search,
                 pageable
@@ -48,7 +52,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User update(Long id, UserUpdateRequest request){
-        User existing = userRepository.findById(id)
+        User existing = userRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(()-> new ResourceNotFoundException("User " + id + " not found"));
 
         existing.setName(request.getName());
@@ -58,9 +62,14 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void delete(Long id){
-        if (!userRepository.existsById(id)) {
-            throw new ResourceNotFoundException("User " + id + " not found");
+        User existing = userRepository.findByIdAndDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User " + id + " not found"));
+
+        if (loanClient.hasActiveLoans(id)) {
+            throw new ConflictException("User " + id + " has active loans and cannot be deleted");
         }
-        userRepository.deleteById(id);
+
+        existing.setDeleted(true);
+        userRepository.save(existing);
     }
 }

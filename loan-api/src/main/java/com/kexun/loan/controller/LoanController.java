@@ -5,6 +5,7 @@ import com.kexun.loan.dto.BorrowRequest;
 import com.kexun.loan.model.Loan;
 import com.kexun.loan.service.LoanService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public class LoanController {
     }
 
     @PostMapping("/users/{userId}/loans")
+    @ResponseStatus(HttpStatus.CREATED)
     public Loan borrow(
             @PathVariable Long userId,
             @Valid @RequestBody BorrowRequest request
@@ -63,6 +65,11 @@ public class LoanController {
         }
 
         return response;
+    }
+
+    @GetMapping("/users/{userId}/loans/active/exists")
+    public boolean hasActiveLoans(@PathVariable Long userId){
+        return loanService.hasActiveLoans(userId);
     }
 }
 

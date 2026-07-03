@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Table(name= "users")
 public class User {
     // attributes
-    @Id
+    @Id   // primary key
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -27,6 +27,9 @@ public class User {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    @Column(nullable = false)
+    private boolean deleted=false;  // set default value for java object, but not database
 
     // no args constructor
     // args constructors are not needed here, coz JPA uses reflection to instantiate entities
@@ -74,7 +77,15 @@ public class User {
         this.updatedAt = updatedAt;
     }
 
-    @PrePersist
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
+    }
+
+    @PrePersist  // automatically sets createdAt & updatedAt before saving; save() still needs to be called explicitly
     public void onCreate() {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;

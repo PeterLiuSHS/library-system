@@ -45,7 +45,7 @@ public class BookApiIntegrationTest {
         mockMvc.perform(post("/books")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         assertEquals(1, bookRepository.count());
 

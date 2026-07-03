@@ -5,6 +5,7 @@ import com.kexun.user.model.User;
 import com.kexun.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,8 +19,9 @@ public class UserController {
     }
 
     @PostMapping
-    public User create(@Valid @RequestBody User user){
-        return userService.create(user);
+    public ResponseEntity<User> create(@Valid @RequestBody User user){
+        User createdUser = userService.create(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
     }
 
     @GetMapping("/{id}")

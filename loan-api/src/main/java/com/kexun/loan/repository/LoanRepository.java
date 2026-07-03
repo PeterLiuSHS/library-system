@@ -19,4 +19,7 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     // check the availability of a book, only return boolean value
     // if the book is not available, return more info (how many days left for last borrower)
     Optional<Loan> findByBookIdAndReturnDateIsNull(Long bookId);
+
+    // check the existence of active loan records
+    boolean existsByUserIdAndReturnDateIsNull(Long UserId);
 }

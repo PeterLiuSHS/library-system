@@ -33,6 +33,14 @@ pipeline {
             }
         }
 
+        stage('Build gateway-api') {
+            steps {
+                dir('gateway-api') {
+                    bat 'mvn clean package'
+                }
+            }
+        }
+
         stage('Run Tests') {
             steps {
                 dir('user-api') {
@@ -42,6 +50,9 @@ pipeline {
                     bat 'mvn test'
                 }
                 dir('loan-api') {
+                    bat 'mvn test'
+                }
+                dir('gateway-api'){
                     bat 'mvn test'
                 }
             }

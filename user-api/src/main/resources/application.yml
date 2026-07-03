@@ -18,3 +18,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+services:
+  loan:
+    base-url: ${LOAN_SERVICE_BASE_URL:http://localhost:8082}

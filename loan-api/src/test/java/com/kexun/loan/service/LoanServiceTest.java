@@ -364,4 +364,43 @@ public class LoanServiceTest {
         verify(loanRepository).findByUserIdAndReturnDateIsNullOrderByDueDateAsc(1L);
         verify(loanRepository).findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(1L);
     }
+
+    @Test
+    void hasActiveLoans_shouldReturnTrue_whenUserHasActiveLoans() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        when(loanRepository.existsByUserIdAndReturnDateIsNull(1L))
+                .thenReturn(true);
+
+        boolean result = loanService.hasActiveLoans(1L);
+
+        assertTrue(result);
+        verify(loanRepository).existsByUserIdAndReturnDateIsNull(1L);
+        verifyNoInteractions(userClient);
+        verifyNoInteractions(bookClient);
+    }
+
+    @Test
+    void hasActiveLoans_shouldReturnFalse_whenUserHasNoActiveLoans() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        when(loanRepository.existsByUserIdAndReturnDateIsNull(1L))
+                .thenReturn(false);
+
+        boolean result = loanService.hasActiveLoans(1L);
+
+        assertFalse(result);
+        verify(loanRepository).existsByUserIdAndReturnDateIsNull(1L);
+        verifyNoInteractions(userClient);
+        verifyNoInteractions(bookClient);
+    }
 }

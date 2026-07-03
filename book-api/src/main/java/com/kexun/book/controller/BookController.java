@@ -17,6 +17,7 @@ public class BookController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     public Book create(@Valid @RequestBody Book book){
         return bookService.create(book);
     }

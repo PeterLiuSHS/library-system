@@ -65,7 +65,7 @@ public class LoanApiIntegrationTest {
         mockMvc.perform(post("/users/{userId}/loans", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value(1L))
                 .andExpect(jsonPath("$.bookId").value(1L))
                 .andExpect(jsonPath("$.loanDate").value(today.toString()))

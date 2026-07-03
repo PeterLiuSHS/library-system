@@ -104,4 +104,9 @@ public class LoanServiceImpl implements LoanService {
         result.addAll(history);
         return result;
     }
+
+    @Override
+    public boolean hasActiveLoans(Long userId) {
+        return loanRepository.existsByUserIdAndReturnDateIsNull(userId);
+    }
 }

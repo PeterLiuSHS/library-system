@@ -1,6 +1,7 @@
 package com.kexun.user.controller;
 
 import com.kexun.user.dto.UserUpdateRequest;
+import com.kexun.user.exception.ConflictException;
 import com.kexun.user.exception.GlobalExceptionHandler;
 import com.kexun.user.exception.ResourceNotFoundException;
 import com.kexun.user.model.User;
@@ -56,7 +57,7 @@ class UserControllerTest {
         mockMvc.perform(post("/users")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(requestBody))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("Alice"))
                 .andExpect(jsonPath("$.email").value("alice@example.com"));
@@ -243,6 +244,19 @@ class UserControllerTest {
 
         mockMvc.perform(delete("/users/{id}", 1L))
                 .andExpect(status().isNotFound());
+
+        verify(userService).delete(1L);
+    }
+
+    @Test
+    void delete_shouldReturnConflict_whenUserHasActiveLoans() throws Exception {
+        doThrow(new ConflictException("User 1 has active loans and cannot be deleted"))
+                .when(userService).delete(1L);
+
+        mockMvc.perform(delete("/users/{id}", 1L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("User 1 has active loans and cannot be deleted"));
 
         verify(userService).delete(1L);
     }

@@ -64,5 +64,23 @@ services:
       USER_SERVICE_BASE_URL: http://user-api:8081
       BOOK_SERVICE_BASE_URL: http://book-api:8080
 
+  gateway-api:
+    build: ./gateway-api
+    container_name: gateway-api
+    restart: always
+    depends_on:
+      user-api:
+        condition: service_started
+      book-api:
+        condition: service_started
+      loan-api:
+        condition: service_started
+    ports:
+      - "9000:9000"
+    environment:
+      USER_API_URL: http://user-api:8081
+      BOOK_API_URL: http://book-api:8080
+      LOAN_API_URL: http://loan-api:8082
+
 volumes:
   mysql_data:

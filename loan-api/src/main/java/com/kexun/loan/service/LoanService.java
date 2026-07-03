@@ -19,4 +19,6 @@ public interface LoanService {
     boolean isBookAvailable(Long bookId);
     // to return detailed info for book check
     long getRemainingDays(Long bookId);
+    // check existence of active loan records
+    boolean hasActiveLoans(Long userId);
 }

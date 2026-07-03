@@ -1,5 +1,6 @@
 package com.kexun.user.integration;
 
+import com.kexun.user.client.LoanClient;
 import com.kexun.user.model.User;
 import com.kexun.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -26,6 +29,9 @@ public class UserApiIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @MockBean
+    private LoanClient loanClient;
 
     @BeforeEach
     void setUp() {
@@ -44,7 +50,7 @@ public class UserApiIntegrationTest {
         mockMvc.perform(post("/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         assertEquals(1, userRepository.count());
 
@@ -77,7 +83,7 @@ public class UserApiIntegrationTest {
     }
 
     @Test
-    void delete_shouldRemoveUserFromDatabase() throws Exception {
+    void delete_shouldSoftDeleteUser_whenUserExistsAndHasNoActiveLoans() throws Exception {
         User user = new User();
         user.setName("Alice");
         user.setEmail("alice@gmail.com");
@@ -85,10 +91,14 @@ public class UserApiIntegrationTest {
         User saved = userRepository.save(user);
         Long id = saved.getId();
 
-        mockMvc.perform(delete("/users/{id}", saved.getId()))
+        when(loanClient.hasActiveLoans(id)).thenReturn(false);
+
+        mockMvc.perform(delete("/users/{id}", id))
                 .andExpect(status().isNoContent());
 
-        assertTrue(userRepository.findById(id).isEmpty());
+        User deletedUser = userRepository.findById(id).orElseThrow();
+
+        assertTrue(deletedUser.isDeleted());
     }
 
     @Test
@@ -245,5 +255,25 @@ public class UserApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void delete_shouldReturn409_whenUserHasActiveLoans() throws Exception {
+        User user = new User();
+        user.setName("Alice");
+        user.setEmail("alice@gmail.com");
+
+        User saved = userRepository.save(user);
+        Long id = saved.getId();
+
+        when(loanClient.hasActiveLoans(id)).thenReturn(true);
+
+        mockMvc.perform(delete("/users/{id}", id))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("User "+id+" has active loans and cannot be deleted"));
+
+        User stillUser = userRepository.findById(id).orElseThrow();
+
+        assertFalse(stillUser.isDeleted());
     }
 }

@@ -55,7 +55,7 @@ public class BookControllerTest {
                                  "isbn": "123456789"
                                                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.title").value("Java Handbook"))
                 .andExpect(jsonPath("$.author").value("Joe Smith"));
