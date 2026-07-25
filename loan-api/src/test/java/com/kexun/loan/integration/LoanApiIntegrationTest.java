@@ -16,7 +16,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import java.time.LocalDate;
 
@@ -207,7 +206,7 @@ public class LoanApiIntegrationTest {
         historyLoan.setUserId(1L);
         historyLoan.setLoanDate(LocalDate.of(2026, 3, 20));
         historyLoan.setDueDate(LocalDate.of(2026, 3, 20).plusDays(8));
-        historyLoan.setReturnDate(LocalDate.of(2026,3,22));
+        historyLoan.setReturnDate(LocalDate.of(2026, 3, 22));
         Loan savedHistoryLoan = loanRepository.save(historyLoan);
 
         mockMvc.perform(get("/users/{userId}/loans", 1L))
@@ -236,7 +235,7 @@ public class LoanApiIntegrationTest {
         historyLoan.setUserId(1L);
         historyLoan.setLoanDate(LocalDate.of(2026, 3, 20));
         historyLoan.setDueDate(LocalDate.of(2026, 3, 20).plusDays(8));
-        historyLoan.setReturnDate(LocalDate.of(2026,3,22));
+        historyLoan.setReturnDate(LocalDate.of(2026, 3, 22));
         Loan savedHistoryLoan = loanRepository.save(historyLoan);
 
         mockMvc.perform(get("/users/{userId}/loans/active", 1L))
@@ -272,5 +271,119 @@ public class LoanApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.available").value(false))
                 .andExpect(jsonPath("$.remainingDays").value(8));
+    }
+
+    @Test
+    void getAllLoans_shouldReturnAllLoansOrderedByLoanDateDesc() throws Exception {
+        Loan olderLoan = new Loan();
+        olderLoan.setUserId(1L);
+        olderLoan.setBookId(1L);
+        olderLoan.setLoanDate(LocalDate.of(2026, 5, 20));
+        olderLoan.setDueDate(LocalDate.of(2026, 5, 20).plusDays(15));
+        olderLoan.setReturnDate(null);
+        loanRepository.save(olderLoan);
+
+        Loan newerLoan = new Loan();
+        newerLoan.setUserId(2L);
+        newerLoan.setBookId(2L);
+        newerLoan.setLoanDate(LocalDate.of(2026, 5, 25));
+        newerLoan.setDueDate(LocalDate.of(2026, 5, 25).plusDays(15));
+        newerLoan.setReturnDate(LocalDate.of(2026, 5, 29));
+        loanRepository.save(newerLoan);
+
+        mockMvc.perform(get("/loans"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].userId").value(2))
+                .andExpect(jsonPath("$[0].bookId").value(2))
+                .andExpect(jsonPath("$[0].loanDate").value("2026-05-25"))
+                .andExpect(jsonPath("$[1].userId").value(1))
+                .andExpect(jsonPath("$[1].bookId").value(1))
+                .andExpect(jsonPath("$[1].loanDate").value("2026-05-20"));
+    }
+
+    @Test
+    void getAllActiveLoans_shouldReturnOnlyActiveLoans() throws Exception {
+        Loan activeLoan = new Loan();
+        activeLoan.setUserId(1L);
+        activeLoan.setBookId(1L);
+        activeLoan.setLoanDate(LocalDate.of(2026, 7, 1));
+        activeLoan.setDueDate(LocalDate.of(2026, 7, 10));
+        activeLoan.setReturnDate(null);
+        loanRepository.save(activeLoan);
+
+        Loan historyLoan = new Loan();
+        historyLoan.setUserId(2L);
+        historyLoan.setBookId(2L);
+        historyLoan.setLoanDate(LocalDate.of(2026, 7, 2));
+        historyLoan.setDueDate(LocalDate.of(2026, 7, 11));
+        historyLoan.setReturnDate(LocalDate.of(2026, 7, 8));
+        loanRepository.save(historyLoan);
+
+        mockMvc.perform(get("/loans/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].userId").value(1))
+                .andExpect(jsonPath("$[0].bookId").value(1))
+                .andExpect(jsonPath("$[0].returnDate").value(nullValue()));
+    }
+
+    @Test
+    void getAllHistoryLoans_shouldReturnOnlyReturnedLoansOrderedByReturnDateDesc()
+            throws Exception {
+
+        Loan activeLoan = new Loan();
+        activeLoan.setUserId(1L);
+        activeLoan.setBookId(1L);
+        activeLoan.setLoanDate(LocalDate.of(2026, 7, 1));
+        activeLoan.setDueDate(LocalDate.of(2026, 7, 10));
+        activeLoan.setReturnDate(null);
+        loanRepository.save(activeLoan);
+
+        Loan olderHistoryLoan = new Loan();
+        olderHistoryLoan.setUserId(2L);
+        olderHistoryLoan.setBookId(2L);
+        olderHistoryLoan.setLoanDate(LocalDate.of(2026, 6, 1));
+        olderHistoryLoan.setDueDate(LocalDate.of(2026, 6, 10));
+        olderHistoryLoan.setReturnDate(LocalDate.of(2026, 6, 8));
+        loanRepository.save(olderHistoryLoan);
+
+        Loan newerHistoryLoan = new Loan();
+        newerHistoryLoan.setUserId(3L);
+        newerHistoryLoan.setBookId(3L);
+        newerHistoryLoan.setLoanDate(LocalDate.of(2026, 7, 1));
+        newerHistoryLoan.setDueDate(LocalDate.of(2026, 7, 10));
+        newerHistoryLoan.setReturnDate(LocalDate.of(2026, 7, 8));
+        loanRepository.save(newerHistoryLoan);
+
+        mockMvc.perform(get("/loans/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].userId").value(3))
+                .andExpect(jsonPath("$[0].bookId").value(3))
+                .andExpect(jsonPath("$[0].returnDate").value("2026-07-08"))
+                .andExpect(jsonPath("$[1].userId").value(2))
+                .andExpect(jsonPath("$[1].bookId").value(2))
+                .andExpect(jsonPath("$[1].returnDate").value("2026-06-08"));
+    }
+
+    @Test
+    void borrow_shouldReturn400_whenDaysExceedMaximum() throws Exception {
+        String requestBody = """
+                {
+                "bookId": 1,
+                "days": 16
+                }
+                """;
+
+        mockMvc.perform(post("/users/{userId}/loans", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.days").exists());
+
+        assertEquals(0, loanRepository.count());
     }
 }

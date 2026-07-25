@@ -1,6 +1,8 @@
 package com.kexun.book.service;
 
+import com.kexun.book.client.LoanClient;
 import com.kexun.book.exception.ResourceNotFoundException;
+import com.kexun.book.exception.ConflictException;
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
 import com.kexun.book.service.impl.BookServiceImpl;
@@ -23,11 +25,13 @@ import static org.mockito.Mockito.*;
 public class BookServiceTest {
     private BookRepository bookRepository;
     private BookService bookService;
+    private LoanClient loanClient;
 
     @BeforeEach
     void setUp() {
         bookRepository = mock(BookRepository.class);
-        bookService = new BookServiceImpl(bookRepository);
+        loanClient = mock(LoanClient.class);
+        bookService = new BookServiceImpl(bookRepository, loanClient);
     }
 
     @Test
@@ -145,13 +149,16 @@ public class BookServiceTest {
     }
 
     @Test
-    void update_shouldUpdateBook_whenBookExists() {
+    void update_shouldUpdateBook_whenBookExistsAndHasNoActiveLoan() {
         Book book = new Book();
         book.setId(1L);
         book.setTitle("Python II");
         book.setAuthor("David White");
+
         when(bookRepository.findById(1L))
                 .thenReturn(Optional.of(book));
+
+        when(loanClient.hasActiveLoan(1L)).thenReturn(false);
 
         Book updatedBook = new Book();
         updatedBook.setTitle("Java 8");
@@ -165,7 +172,18 @@ public class BookServiceTest {
         assertEquals("Java 8", result.getTitle());
         assertEquals("Joe Smith", result.getAuthor());
         verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
         verify(bookRepository).save(book);
+    }
+
+    @Test
+    void update_shouldThrowConflictException_whenBookHasActiveLoan() {
+        Book existingBook = new Book();
+        existingBook.setId(1L);
+
+        Book updateRequest = new Book();
+        updateRequest.setTitle("Updated title");
+        updateRequest.setAuthor("Updated author");
     }
 
     @Test
@@ -181,15 +199,41 @@ public class BookServiceTest {
     }
 
     @Test
-    void delete_shouldDeleteBook_whenBookExists() {
+    void delete_shouldDeleteBook_whenBookExistsAndHasNoActiveLoan() {
         Book book = new Book();
+        book.setId(1L);
 
         when(bookRepository.findById(1L))
                 .thenReturn(Optional.of(book));
 
+        when(loanClient.hasActiveLoan(1L)).thenReturn(false);
+
         bookService.delete(1L);
+
         verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
         verify(bookRepository).delete(book);
+    }
+
+    @Test
+    void delete_shouldThrowConflictException_whenBookHasActiveLoan() {
+        Book book = new Book();
+        book.setId(1L);
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+
+        when(loanClient.hasActiveLoan(1L)).thenReturn(true);
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> bookService.delete(1L)
+        );
+
+        assertEquals("Book 1 has an active loan and cannot be deleted", ex.getMessage());
+
+        verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
+        verify(bookRepository, never()).delete(any(Book.class));
     }
 
     @Test

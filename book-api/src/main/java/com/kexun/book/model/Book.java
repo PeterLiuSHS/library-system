@@ -33,6 +33,11 @@ public class Book {
     public Book() {
     }
 
+    @PrePersist
+    public void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
+
     // ====getter & setter====
     public Long getId() {
         return id;

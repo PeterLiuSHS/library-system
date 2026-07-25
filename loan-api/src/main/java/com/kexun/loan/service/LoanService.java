@@ -9,11 +9,11 @@ public interface LoanService {
     Loan borrow(Long userId, Long bookId, int days);
     // action: return a book
     Loan returnBook(Long userId, Long bookId);
-    // get active loan records
+    // get active loan records by userId
     List<Loan> getActiveLoansByUser(Long userId);
-    // get historical loan records
+    // get historical loan records by userId
     List<Loan> getLoanHistoryByUser(Long userId);
-    // get all loan records = active + historical
+    // get all loan records by userId = active + historical
     List<Loan> getAllLoansForUser(Long userId);
     // quick check the book's availability
     boolean isBookAvailable(Long bookId);
@@ -21,4 +21,10 @@ public interface LoanService {
     long getRemainingDays(Long bookId);
     // check existence of active loan records
     boolean hasActiveLoans(Long userId);
+    // get all active loans
+    List<Loan> getAllActiveLoans();
+    // get all loan records
+    List<Loan> getAllLoans();
+    // get all historical loan records
+    List<Loan> getAllHistoryLoans();
 }

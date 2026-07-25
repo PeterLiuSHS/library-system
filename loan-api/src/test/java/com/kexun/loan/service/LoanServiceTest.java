@@ -403,4 +403,116 @@ public class LoanServiceTest {
         verifyNoInteractions(userClient);
         verifyNoInteractions(bookClient);
     }
+
+    @Test
+    void getAllLoans_shouldReturnAllLoans() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        Loan loan1 = new Loan();
+        loan1.setId(1L);
+        loan1.setUserId(1L);
+        loan1.setBookId(5L);
+        loan1.setReturnDate(LocalDate.of(2026, 7, 10));
+
+        Loan loan2 = new Loan();
+        loan2.setId(2L);
+        loan2.setUserId(2L);
+        loan2.setBookId(6L);
+        loan2.setReturnDate(LocalDate.of(2026, 7, 6));
+
+        List<Loan> historyLoans = Arrays.asList(loan1, loan2);
+
+        when(loanRepository.findAllByOrderByLoanDateDesc())
+                .thenReturn(historyLoans);
+
+        List<Loan> result = loanService.getAllLoans();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals(historyLoans, result);
+
+        verify(loanRepository).findAllByOrderByLoanDateDesc();
+
+        verifyNoInteractions(userClient);
+        verifyNoInteractions(bookClient);
+    }
+
+    @Test
+    void getAllActiveLoans_shouldReturnActiveLoans() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+        Loan loan1 = new Loan();
+        loan1.setId(1L);
+        loan1.setUserId(1L);
+        loan1.setBookId(5L);
+        loan1.setDueDate(LocalDate.of(2026, 7, 15));
+        loan1.setReturnDate(null);
+
+        Loan loan2 = new Loan();
+        loan2.setId(2L);
+        loan2.setUserId(2L);
+        loan2.setBookId(6L);
+        loan2.setDueDate(LocalDate.of(2026, 7, 21));
+        loan2.setReturnDate(null);
+
+        List<Loan> activeLoans = Arrays.asList(loan1, loan2);
+
+        when(loanRepository.findByReturnDateIsNullOrderByDueDateAsc())
+                .thenReturn(activeLoans);
+
+        List<Loan> result = loanService.getAllActiveLoans();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals(activeLoans, result);
+
+        verify(loanRepository).findByReturnDateIsNullOrderByDueDateAsc();
+        verifyNoInteractions(userClient);
+        verifyNoInteractions(bookClient);
+    }
+
+    @Test
+    void getAllHistoryLoans_shouldReturnHistoryLoans() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        Loan loan1 = new Loan();
+        loan1.setId(1L);
+        loan1.setUserId(1L);
+        loan1.setBookId(5L);
+        loan1.setReturnDate(LocalDate.of(2026, 7, 10));
+
+        Loan loan2 = new Loan();
+        loan2.setId(2L);
+        loan2.setUserId(2L);
+        loan2.setBookId(6L);
+        loan2.setReturnDate(LocalDate.of(2026, 7, 8));
+
+        List<Loan> historyLoans = Arrays.asList(loan1, loan2);
+
+        when(loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc())
+                .thenReturn(historyLoans);
+
+        List<Loan> result = loanService.getAllHistoryLoans();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals(historyLoans, result);
+
+        verify(loanRepository)
+                .findByReturnDateIsNotNullOrderByReturnDateDesc();
+
+        verifyNoInteractions(userClient);
+        verifyNoInteractions(bookClient);
+    }
 }

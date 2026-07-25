@@ -1,14 +1,17 @@
 package com.kexun.loan.dto;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 public class BorrowRequest {
+
     @NotNull
     private Long bookId;
 
     @NotNull
     @Min(1)
+    @Max(15)
     private Integer days;
 
     public BorrowRequest() {

@@ -13,6 +13,15 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     // find alive loan records by userId
     List<Loan> findByUserIdAndReturnDateIsNullOrderByDueDateAsc(Long userId);
 
+    // get all active records
+    List<Loan> findByReturnDateIsNullOrderByDueDateAsc();
+
+    // get all historical records
+    List<Loan> findByReturnDateIsNotNullOrderByReturnDateDesc();
+
+    // get all records = active + historical
+    List<Loan> findAllByOrderByLoanDateDesc();
+
     // generated for return-book action
     Optional<Loan> findByUserIdAndBookIdAndReturnDateIsNull(Long userId, Long bookId);
 
@@ -21,5 +30,5 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     Optional<Loan> findByBookIdAndReturnDateIsNull(Long bookId);
 
     // check the existence of active loan records
-    boolean existsByUserIdAndReturnDateIsNull(Long UserId);
+    boolean existsByUserIdAndReturnDateIsNull(Long userId);
 }

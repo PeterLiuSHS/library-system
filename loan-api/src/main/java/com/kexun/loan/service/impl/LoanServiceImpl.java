@@ -1,5 +1,13 @@
 package com.kexun.loan.service.impl;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+
 import com.kexun.loan.client.BookClient;
 import com.kexun.loan.client.UserClient;
 import com.kexun.loan.exception.ConflictException;
@@ -7,13 +15,6 @@ import com.kexun.loan.exception.ResourceNotFoundException;
 import com.kexun.loan.model.Loan;
 import com.kexun.loan.repository.LoanRepository;
 import com.kexun.loan.service.LoanService;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 @Service
 public class LoanServiceImpl implements LoanService {
@@ -33,8 +34,8 @@ public class LoanServiceImpl implements LoanService {
         userClient.assertUserExists(userId);
         bookClient.assertBookExists(bookId);
         // check the availability of the book first
-        Optional<Loan> activeLoan =
-                        loanRepository.findByBookIdAndReturnDateIsNull(bookId);
+        Optional<Loan> activeLoan
+                = loanRepository.findByBookIdAndReturnDateIsNull(bookId);
 
         if (activeLoan.isPresent()) {  // if the value exists, .isPresent() will be true
             throw new ConflictException("Book is not available");
@@ -55,8 +56,8 @@ public class LoanServiceImpl implements LoanService {
     public Loan returnBook(Long userId, Long bookId) {
         Loan loan = loanRepository
                 .findByUserIdAndBookIdAndReturnDateIsNull(userId, bookId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Active loan not found for user " + userId + " and book " + bookId));
+                .orElseThrow(()
+                        -> new ResourceNotFoundException("Active loan not found for user " + userId + " and book " + bookId));
 
         loan.setReturnDate(LocalDate.now());
         return loanRepository.save(loan);
@@ -108,5 +109,20 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public boolean hasActiveLoans(Long userId) {
         return loanRepository.existsByUserIdAndReturnDateIsNull(userId);
+    }
+
+    @Override
+    public List<Loan> getAllLoans() {
+        return loanRepository.findAllByOrderByLoanDateDesc();
+    }
+
+    @Override
+    public List<Loan> getAllActiveLoans() {
+        return loanRepository.findByReturnDateIsNullOrderByDueDateAsc();
+    }
+
+    @Override
+    public List<Loan> getAllHistoryLoans() {
+        return loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc();
     }
 }

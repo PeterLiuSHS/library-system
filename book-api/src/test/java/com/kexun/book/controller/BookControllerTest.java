@@ -1,10 +1,10 @@
 package com.kexun.book.controller;
 
 import com.kexun.book.exception.GlobalExceptionHandler;
+import com.kexun.book.exception.ConflictException;
 import com.kexun.book.exception.ResourceNotFoundException;
 import com.kexun.book.model.Book;
 import com.kexun.book.service.BookService;
-import org.apache.catalina.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -219,18 +219,49 @@ public class BookControllerTest {
         doThrow(new ResourceNotFoundException("Book 1 not found"))
                 .when(bookService).update(eq(1L), any(Book.class));
 
-        mockMvc.perform(put("/books/{id}",1L)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {
-                        "title": "Java Handbook",
-                        "author": "Joe Smith", 
-                        "isbn": "123456789"
-                        }"""))
+        mockMvc.perform(put("/books/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "title": "Java Handbook",
+                                "author": "Joe Smith", 
+                                "isbn": "123456789"
+                                }"""))
                 .andExpect(status().isNotFound());
 
         verify(bookService, times(1)).update(eq(1L), any(Book.class));
+    }
 
+    @Test
+    void delete_shouldReturnConflict_whenBookHasActiveLoan() throws Exception {
+        doThrow(new ConflictException("Book 1 has an active loan and cannot be deleted")).when(bookService).delete(1L);
 
+        mockMvc.perform(delete("/books/{id}", 1L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Book 1 has an active loan and cannot be deleted"));
+
+        verify(bookService).delete(1L);
+    }
+
+    @Test
+    void update_shouldReturnConflict_whenBookHasActiveLoan() throws Exception {
+        doThrow(new ConflictException("Book 1 has an active loan and cannot be updated"))
+                .when(bookService).update(eq(1L), any(Book.class));
+
+        mockMvc.perform(put("/books/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "title": "Java Handbook",
+                                "author": "Joe Smith",
+                                "isbn": "123456789"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Book 1 has an active loan and cannot be updated"));
+
+        verify(bookService).update(eq(1L), any(Book.class));
     }
 }

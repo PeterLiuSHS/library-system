@@ -1,6 +1,8 @@
 package com.kexun.book.service.impl;
 
+import com.kexun.book.client.LoanClient;
 import com.kexun.book.exception.ResourceNotFoundException;
+import com.kexun.book.exception.ConflictException;
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
 import com.kexun.book.service.BookService;
@@ -12,10 +14,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class BookServiceImpl implements BookService {
 
-    private BookRepository bookRepository;
+    private final BookRepository bookRepository;
+    private final LoanClient loanClient;
 
-    public BookServiceImpl(BookRepository bookRepository) {
+    public BookServiceImpl(BookRepository bookRepository, LoanClient loanClient) {
         this.bookRepository = bookRepository;
+        this.loanClient = loanClient;
     }
 
     @Override
@@ -25,13 +29,13 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public Book getById(Long id) {
-        return bookRepository.findById(id).orElseThrow(()->new ResourceNotFoundException("Book "+id+" not found"));
+        return bookRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Book " + id + " not found"));
     }
 
     @Override
-    public Page<Book> list(String search, int page, int size){
+    public Page<Book> list(String search, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        if (search == null || search.isBlank()){
+        if (search == null || search.isBlank()) {
             return bookRepository.findAll(pageable);
         }
         return bookRepository.findByTitleContainingOrAuthorContaining(search, search, pageable);
@@ -40,14 +44,26 @@ public class BookServiceImpl implements BookService {
     @Override
     public void delete(Long id) {
         Book book = bookRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Book "+id+" not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Book " + id + " not found"));
+
+        if (loanClient.hasActiveLoan(id)) {
+            throw new ConflictException(
+                    "Book " + id + " has an active loan and cannot be deleted"
+            );
+        }
         bookRepository.delete(book);
     }
 
     @Override
     public Book update(Long id, Book book) {
         Book existing = bookRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Book "+id+" not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Book " + id + " not found"));
+
+        if (loanClient.hasActiveLoan(id)) {
+            throw new ConflictException(
+                    "Book " + id + " has an active loan and cannot be updated"
+            );
+        }
 
         existing.setTitle(book.getTitle());
         existing.setAuthor(book.getAuthor());

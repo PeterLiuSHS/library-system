@@ -25,40 +25,40 @@ public class LoanController {
     public Loan borrow(
             @PathVariable Long userId,
             @Valid @RequestBody BorrowRequest request
-    ){
+    ) {
         return loanService.borrow(userId, request.getBookId(), request.getDays());
     }
 
     @PutMapping("/users/{userId}/loans/{bookId}/return")
     public Loan returnBook(
             @PathVariable Long userId, @PathVariable Long bookId
-    ){
+    ) {
         return loanService.returnBook(userId, bookId);
     }
 
     @GetMapping("/users/{userId}/loans")
-    public List<Loan> getAllLoansByUser(@PathVariable Long userId){
+    public List<Loan> getAllLoansByUser(@PathVariable Long userId) {
         return loanService.getAllLoansForUser(userId);
     }
 
     @GetMapping("/users/{userId}/loans/active")
-    public List<Loan> getActiveLoans(@PathVariable Long userId){
+    public List<Loan> getActiveLoans(@PathVariable Long userId) {
         return loanService.getActiveLoansByUser(userId);
     }
 
     @GetMapping("/users/{userId}/loans/history")
-    public List<Loan> getHistoryLoans(@PathVariable Long userId){
+    public List<Loan> getHistoryLoans(@PathVariable Long userId) {
         return loanService.getLoanHistoryByUser(userId);
     }
 
     @GetMapping("/books/{bookId}/availability")
-    public AvailabilityResponse checkAvailability(@PathVariable Long bookId){
+    public AvailabilityResponse checkAvailability(@PathVariable Long bookId) {
         boolean available = loanService.isBookAvailable(bookId);
 
         AvailabilityResponse response = new AvailabilityResponse();
         response.setAvailable(available);
 
-        if(!available){
+        if (!available) {
             response.setRemainingDays(loanService.getRemainingDays(bookId));
         } else {
             response.setRemainingDays(0);
@@ -67,8 +67,24 @@ public class LoanController {
         return response;
     }
 
+    @GetMapping("/loans")
+    public List<Loan> getAllLoans() {
+        return loanService.getAllLoans();
+    }
+
+    @GetMapping("/loans/active")
+    public List<Loan> getAllActiveLoans() {
+        return loanService.getAllActiveLoans();
+    }
+
+    @GetMapping("/loans/history")
+    public List<Loan> getHistoryLoans() {
+        return loanService.getAllHistoryLoans();
+    }
+
+
     @GetMapping("/users/{userId}/loans/active/exists")
-    public boolean hasActiveLoans(@PathVariable Long userId){
+    public boolean hasActiveLoans(@PathVariable Long userId) {
         return loanService.hasActiveLoans(userId);
     }
 }

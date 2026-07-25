@@ -47,6 +47,7 @@ public class UserServiceTest {
 
         assertEquals(user, result);
         verify(userRepository).save(user);
+        verifyNoInteractions(loanClient);
     }
 
     @Test
@@ -190,6 +191,7 @@ public class UserServiceTest {
 
         verify(userRepository).findByIdAndDeletedFalse(1L);
         verify(userRepository).save(user);
+        verifyNoInteractions(loanClient);
     }
 
     @Test
@@ -208,26 +210,6 @@ public class UserServiceTest {
         assertEquals("User 1 not found", ex.getMessage());
         verify(userRepository).findByIdAndDeletedFalse(1L);
         verify(userRepository, never()).save(any(User.class));
-    }
-
-    @Test
-    void update_shouldCallRepositorySave_whenUserExistsAndIsNotDeleted() {
-        User user = new User();
-        user.setId(1L);
-        user.setName("Peter");
-
-        when(userRepository.findByIdAndDeletedFalse(1L))
-                .thenReturn(Optional.of(user));
-
-        UserUpdateRequest request = new UserUpdateRequest();
-        request.setName("Jack");
-
-        when(userRepository.save(any(User.class)))
-                .thenReturn(user);
-
-        userService.update(1L, request);
-
-        verify(userRepository).save(user);
     }
 
     @Test
@@ -275,10 +257,10 @@ public class UserServiceTest {
     }
 
     @Test
-    void deleted_shouldSoftDeleteUser_whenUserExistsAndHasNotActiveLoans() {
+    void delete_shouldSoftDeleteUser_whenUserExistsAndHasNoActiveLoans() {
         User user = new User();
         user.setId(1L);
-        user.setDeleted(true);
+        user.setDeleted(false);
 
         when(userRepository.findByIdAndDeletedFalse(1L))
                 .thenReturn(Optional.of(user));
@@ -296,6 +278,7 @@ public class UserServiceTest {
         verify(userRepository).findByIdAndDeletedFalse(1L);
         verify(loanClient).hasActiveLoans(1L);
         verify(userRepository).save(user);
+        verify(userRepository, never()).delete(any(User.class));
         verify(userRepository, never()).deleteById(anyLong());
     }
 }

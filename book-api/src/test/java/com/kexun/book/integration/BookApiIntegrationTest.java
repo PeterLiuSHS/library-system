@@ -2,6 +2,8 @@ package com.kexun.book.integration;
 
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
+import com.kexun.book.client.LoanClient;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,12 +11,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,6 +27,9 @@ public class BookApiIntegrationTest {
 
     @Autowired
     private BookRepository bookRepository;
+
+    @MockBean
+    private LoanClient loanClient;
 
     @BeforeEach
     void setUp() {
@@ -53,6 +57,7 @@ public class BookApiIntegrationTest {
         assertEquals("Python HandBook", savedBook.getTitle());
         assertEquals("David Lau", savedBook.getAuthor());
         assertEquals("1234567890", savedBook.getIsbn());
+        assertNotNull(savedBook.getCreatedAt());
     }
 
     @Test
@@ -176,6 +181,8 @@ public class BookApiIntegrationTest {
         book1.setIsbn("1234567890");
         Book savedBook = bookRepository.save(book1);
 
+        when(loanClient.hasActiveLoan(savedBook.getId())).thenReturn(false);
+
         String requestBody = """
                  {
                 "title": "Python HandBook Revised Edition",
@@ -190,6 +197,12 @@ public class BookApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Python HandBook Revised Edition"))
                 .andExpect(jsonPath("$.author").value("David Lau and Team"));
+
+        Book updatedBook = bookRepository.findById(savedBook.getId()).orElseThrow();
+
+        assertEquals("Python HandBook Revised Edition", updatedBook.getTitle());
+
+        assertEquals("David Lau and Team", updatedBook.getAuthor());
     }
 
     @Test
@@ -210,17 +223,68 @@ public class BookApiIntegrationTest {
     }
 
     @Test
-    void delete_shouldRemoveBookFromDatabase_whenBookExists() throws Exception {
-        Book book1 = new Book();
-        book1.setTitle("Python HandBook");
-        book1.setAuthor("David Lau");
-        book1.setIsbn("1234567890");
-        Book savedBook = bookRepository.save(book1);
+    void update_shouldReturn409_whenBookHasActiveLoan() throws Exception {
+        Book book = new Book();
+        book.setTitle("Python HandBook");
+        book.setAuthor("David Lau");
+        book.setIsbn("1234567890");
+        Book savedBook = bookRepository.save(book);
+
+        when(loanClient.hasActiveLoan(savedBook.getId())).thenReturn(true);
+
+        String requestBody = """
+                {
+                "title": "Python HandBook Revised Edition",
+                "author": "David Lau and Team",
+                "isbn": "1234567890"}
+                """;
+
+        mockMvc.perform(put("/books/{id}", savedBook.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").
+                        value("Book "+savedBook.getId()+" has an active loan and cannot be updated"));
+
+        Book unchangedBook = bookRepository.findById(savedBook.getId()).orElseThrow();
+
+        assertEquals("Python HandBook", unchangedBook.getTitle());
+        assertEquals("David Lau", unchangedBook.getAuthor());
+    }
+
+    @Test
+    void delete_shouldRemoveBook_whenBookExistsAndHasNoActiveLoan() throws Exception {
+        Book book = new Book();
+        book.setTitle("Python HandBook");
+        book.setAuthor("David Lau");
+        book.setIsbn("1234567890");
+        Book savedBook = bookRepository.save(book);
+
+        when(loanClient.hasActiveLoan(savedBook.getId())).thenReturn(false);
 
         mockMvc.perform(delete("/books/{id}", savedBook.getId()))
                 .andExpect(status().isNoContent());
 
         assertTrue(bookRepository.findById(savedBook.getId()).isEmpty());
+    }
+
+    @Test
+    void delete_shouldReturn409_whenBookHasActiveLoan() throws Exception {
+        Book book = new Book();
+        book.setTitle("Python HandBook");
+        book.setAuthor("David Lau");
+        book.setIsbn("1234567890");
+        Book savedBook = bookRepository.save(book);
+
+        when(loanClient.hasActiveLoan(savedBook.getId())).thenReturn(true);
+
+        mockMvc.perform(delete("/books/{id}", savedBook.getId()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Book "+savedBook.getId()+" has an active loan and cannot be deleted"));
+
+        assertTrue(bookRepository.findById(savedBook.getId()).isPresent());
     }
 
     @Test

@@ -57,6 +57,9 @@ public class UserApiIntegrationTest {
         User savedUser = userRepository.findAll().get(0);
         assertEquals("Alice", savedUser.getName());
         assertEquals("alice@example.com", savedUser.getEmail());
+        assertNotNull(savedUser.getCreatedAt());
+        assertNotNull(savedUser.getUpdatedAt());
+        assertFalse(savedUser.isDeleted());
     }
 
     @Test
@@ -80,6 +83,26 @@ public class UserApiIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("User 1 not found"));
 
+    }
+
+    @Test
+    void getById_shouldReturn404_afterUserIsSoftDeleted() throws Exception {
+        User user = new User();
+        user.setName("Alice");
+        user.setEmail("alice@gmail.com");
+        User savedUser = userRepository.save(user);
+
+        when(loanClient.hasActiveLoans(savedUser.getId())).thenReturn(false);
+
+        mockMvc.perform(delete("/users/{id}", savedUser.getId()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/users/{id}", savedUser.getId()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("User "+savedUser.getId() + " not found"));
+
+        assertTrue(userRepository.findById(savedUser.getId()).isPresent());
     }
 
     @Test
@@ -211,6 +234,26 @@ public class UserApiIntegrationTest {
     }
 
     @Test
+    void list_shouldExcludeSoftDeletedUsers() throws Exception {
+        User activeUser = new User();
+        activeUser.setName("Alice");
+        activeUser.setEmail("alice@example.com");
+        userRepository.save(activeUser);
+
+        User deletedUser = new User();
+        deletedUser.setName("Bob");
+        deletedUser.setEmail("bob@example.com");
+        deletedUser.setDeleted(true);
+        userRepository.save(deletedUser);
+
+        mockMvc.perform(get("/users"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Alice"))
+                .andExpect(jsonPath("$.content[*].name", not(hasItem("Bob"))));
+    }
+
+    @Test
     void update_shouldModifyUserInDatabase_whenUserExists() throws Exception {
         User user = new User();
         user.setName("Alice");
@@ -228,6 +271,11 @@ public class UserApiIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Alice Wong"));
+
+        User updatedUser = userRepository.findById(savedUser.getId()).orElseThrow();
+
+        assertEquals("Alice Wong", updatedUser.getName());
+        assertEquals("alice@example.com", updatedUser.getEmail());
     }
 
     @Test
@@ -242,6 +290,27 @@ public class UserApiIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isNotFound());
 
+    }
+
+    @Test
+    void update_shouldReturn404_whenUserIsSoftDeleted() throws Exception {
+        User user = new User();
+        user.setName("Alice");
+        user.setEmail("alice@example.com");
+        user.setDeleted(true);
+        User savedUser = userRepository.save(user);
+
+        mockMvc.perform(put("/users/{id}", savedUser.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "name": "Alice Wong"
+                            }
+                            """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message")
+                        .value("User " + savedUser.getId() + " not found"));
     }
 
     @Test

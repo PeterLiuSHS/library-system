@@ -80,7 +80,7 @@ class UserControllerTest {
     }
 
     @Test
-    void create_shouldReturnBadRequest_whenEmailAlreadyExists() throws Exception {
+    void create_shouldReturnConflict_whenEmailAlreadyExists() throws Exception {
         doThrow(new DataIntegrityViolationException("Duplicate email")).when(userService).create(any(User.class));
 
         String requestBody = """
@@ -165,7 +165,7 @@ class UserControllerTest {
     }
 
     @Test
-    void list_shouldReturnEmptyPage_whenNoUersExist() throws Exception {
+    void list_shouldReturnEmptyPage_whenNoUsersExist() throws Exception {
         Page<User> emptyPage = new PageImpl<>(Collections.emptyList());
 
         when(userService.list(null, 0, 5)).thenReturn(emptyPage);
@@ -178,7 +178,7 @@ class UserControllerTest {
     }
 
     @Test
-    void update_shouldReturnUpdatedUser_whenRequstIsValid() throws Exception {
+    void update_shouldReturnUpdatedUser_whenRequestIsValid() throws Exception {
         User updatedUser = new User();
         updatedUser.setId(1L);
         updatedUser.setName("David");
@@ -219,11 +219,12 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
-                        "name": "Jack", 
-                        "email": "jack@gmail.com"                                                
+                        "name": "Jack"                                              
                         }
                         """))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("User 1 not found"));
 
         verify(userService).update(eq(1L), any(UserUpdateRequest.class));
     }
