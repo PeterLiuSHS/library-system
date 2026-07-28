@@ -1,6 +1,7 @@
 package com.kexun.user.integration;
 
 import com.kexun.user.client.LoanClient;
+import com.kexun.user.exception.DownstreamServiceException;
 import com.kexun.user.model.User;
 import com.kexun.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -183,6 +184,8 @@ public class UserApiIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Email already exists"));
+
+        assertEquals(1, userRepository.count());
     }
 
     @Test
@@ -251,6 +254,51 @@ public class UserApiIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].name").value("Alice"))
                 .andExpect(jsonPath("$.content[*].name", not(hasItem("Bob"))));
+    }
+
+    @Test
+    void list_shouldReturn400_whenPageIsNegative()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "-1")
+                        .param("size", "5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, userRepository.count());
+    }
+
+    @Test
+    void list_shouldReturn400_whenSizeIsZero()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "0")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, userRepository.count());
+    }
+
+    @Test
+    void list_shouldReturn400_whenSizeExceedsMaximum()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "0")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, userRepository.count());
     }
 
     @Test
@@ -344,5 +392,35 @@ public class UserApiIntegrationTest {
         User stillUser = userRepository.findById(id).orElseThrow();
 
         assertFalse(stillUser.isDeleted());
+    }
+
+    @Test
+    void delete_shouldReturn503_whenLoanServiceIsUnavailable()
+            throws Exception {
+
+        User user = new User();
+        user.setName("Alice");
+        user.setEmail("alice@gmail.com");
+
+        User savedUser = userRepository.save(user);
+
+        when(loanClient.hasActiveLoans(savedUser.getId()))
+                .thenThrow(
+                        new DownstreamServiceException(
+                                "Loan service is unavailable"
+                        )
+                );
+
+        mockMvc.perform(delete("/users/{id}", savedUser.getId()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message")
+                        .value("Loan service is unavailable"));
+
+        User unchangedUser = userRepository
+                .findById(savedUser.getId())
+                .orElseThrow();
+
+        assertFalse(unchangedUser.isDeleted());
     }
 }

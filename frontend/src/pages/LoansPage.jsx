@@ -17,6 +17,12 @@ function LoansPage() {
   const adminStatus = useSelector((state) => state.loans.adminStatus);
   const adminError = useSelector((state) => state.loans.adminError);
   const adminFilter = useSelector((state) => state.loans.adminFilter);
+  const adminPage = useSelector((state) => state.loans.adminPage);
+  const adminSize = useSelector((state) => state.loans.adminSize);
+  const adminTotalPages = useSelector((state) => state.loans.adminTotalPages);
+  const adminTotalElements = useSelector(
+    (state) => state.loans.adminTotalElements,
+  );
 
   const [userId, setUserId] = useState("");
   const [borrowData, setBorrowData] = useState({
@@ -27,12 +33,34 @@ function LoansPage() {
 
   useEffect(() => {
     if (adminStatus === "idle") {
-      dispatch(fetchAdminLoans("active"));
+      dispatch(
+        fetchAdminLoans({
+          filter: "active",
+          page: 0,
+          size: 5,
+        }),
+      );
     }
   }, [adminStatus, dispatch]);
 
   function handleAdminFilterChange(filter) {
-    dispatch(fetchAdminLoans(filter));
+    dispatch(
+      fetchAdminLoans({
+        filter,
+        page: 0,
+        size: adminSize,
+      }),
+    );
+  }
+
+  function handleAminPageChange(newPage) {
+    dispatch(
+      fetchAdminLoans({
+        filter: adminFilter,
+        page: newPage,
+        size: adminSize,
+      }),
+    );
   }
 
   function handleSearch(event) {
@@ -62,7 +90,13 @@ function LoansPage() {
       ).unwrap();
 
       dispatch(fetchLoansByUser(borrowData.userId));
-      dispatch(fetchAdminActiveLoans(adminFilter));
+      dispatch(
+        fetchAdminActiveLoans({
+          filter: adminFilter,
+          page: 0,
+          size: adminSize,
+        }),
+      );
 
       setUserId(borrowData.userId);
 
@@ -78,7 +112,17 @@ function LoansPage() {
     try {
       await dispatch(returnBook({ userId, bookId })).unwrap();
       dispatch(fetchLoansByUser(userId));
-      dispatch(fetchAdminLoans(adminFilter));
+
+      const shouldGoToPreviousPage =
+        adminFilter === "active" && adminLoans.length === 1 && adminPage > 0;
+
+      dispatch(
+        fetchAdminLoans({
+          filter: adminFilter,
+          page: shouldGoToPreviousPage ? adminPage - 1 : adminPage,
+          size: adminSize,
+        }),
+      );
     } catch (error) {
       // The rejected action stores the error in Redux.
     }
@@ -116,6 +160,8 @@ function LoansPage() {
           value={borrowData.days}
           onChange={handleBorrowChange}
           required
+          min="1"
+          max="15"
           type="number"
         />
 
@@ -181,6 +227,9 @@ function LoansPage() {
       <div className="loans-section">
         <h3>Loan Records</h3>
         <p>View all, active, or returned loan records.</p>
+        {adminStatus === "succeeded" && (
+          <p>Total records: {adminTotalElements}</p>
+        )}
 
         <div className="filter-buttons">
           <button
@@ -246,6 +295,30 @@ function LoansPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {adminStatus === "succeeded" && adminTotalPages > 1 && (
+          <div className="pagination">
+            <button
+              type="button"
+              disabled={adminPage === 0}
+              onClick={() => handleAdminPageChange(adminPage - 1)}
+            >
+              Previous
+            </button>
+
+            <span>
+              Page {adminPage + 1} of {adminTotalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={adminPage + 1 >= adminTotalPages}
+              onClick={() => handleAdminPageChange(adminPage + 1)}
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
     </section>

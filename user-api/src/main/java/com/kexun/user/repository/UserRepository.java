@@ -18,4 +18,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
             String emailKeyword,
             Pageable pageable
     );
+
+    boolean existsByEmail(String email);
 }

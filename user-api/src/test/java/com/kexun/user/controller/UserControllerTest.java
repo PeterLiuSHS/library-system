@@ -4,6 +4,7 @@ import com.kexun.user.dto.UserUpdateRequest;
 import com.kexun.user.exception.ConflictException;
 import com.kexun.user.exception.GlobalExceptionHandler;
 import com.kexun.user.exception.ResourceNotFoundException;
+import com.kexun.user.exception.DownstreamServiceException;
 import com.kexun.user.model.User;
 import com.kexun.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -81,7 +82,7 @@ class UserControllerTest {
 
     @Test
     void create_shouldReturnConflict_whenEmailAlreadyExists() throws Exception {
-        doThrow(new DataIntegrityViolationException("Duplicate email")).when(userService).create(any(User.class));
+        doThrow(new ConflictException("Email already exists")).when(userService).create(any(User.class));
 
         String requestBody = """
                 {
@@ -178,6 +179,51 @@ class UserControllerTest {
     }
 
     @Test
+    void list_shouldReturnBadRequest_whenPageIsNegative()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "-1")
+                        .param("size", "5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void list_shouldReturnBadRequest_whenSizeIsZero()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "0")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void list_shouldReturnBadRequest_whenSizeExceedsMaximum()
+            throws Exception {
+
+        mockMvc.perform(get("/users")
+                        .param("page", "0")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(userService);
+    }
+
+    @Test
     void update_shouldReturnUpdatedUser_whenRequestIsValid() throws Exception {
         User updatedUser = new User();
         updatedUser.setId(1L);
@@ -258,6 +304,27 @@ class UserControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("User 1 has active loans and cannot be deleted"));
+
+        verify(userService).delete(1L);
+    }
+
+    @Test
+    void delete_shouldReturnServiceUnavailable_whenLoanServiceFails()
+            throws Exception {
+
+        doThrow(
+                new DownstreamServiceException(
+                        "Loan service is unavailable"
+                )
+        )
+                .when(userService)
+                .delete(1L);
+
+        mockMvc.perform(delete("/users/{id}", 1L))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message")
+                        .value("Loan service is unavailable"));
 
         verify(userService).delete(1L);
     }

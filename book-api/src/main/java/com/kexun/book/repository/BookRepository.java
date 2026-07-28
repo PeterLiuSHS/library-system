@@ -12,6 +12,8 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             String authorKeyword,
             Pageable pageable
     );
+
+    boolean existsByIsbn(String isbn);
 }
 
 

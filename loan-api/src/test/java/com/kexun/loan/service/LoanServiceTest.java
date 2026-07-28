@@ -5,11 +5,18 @@ import com.kexun.loan.client.UserClient;
 import com.kexun.loan.repository.LoanRepository;
 import com.kexun.loan.service.impl.LoanServiceImpl;
 import com.kexun.loan.model.Loan;
+import com.kexun.loan.exception.ConflictException;
+import com.kexun.loan.exception.ResourceNotFoundException;
+import com.kexun.loan.exception.DownstreamServiceException;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -30,24 +37,24 @@ public class LoanServiceTest {
                 new LoanServiceImpl(loanRepository, userClient, bookClient);
 
         // define the action of mock object: book not borrowed
-        when(loanRepository.findByBookIdAndReturnDateIsNull(5L))   // coz it's mocked, so when(...).thenReturn(...) is a must
-                .thenReturn(Optional.empty());  // the return type of mockito should be same as the original method signature, the original return type is Optional<Loan>
+        when(loanRepository.saveAndFlush(any(Loan.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        // mock the repository save successfully
-        Loan loan = new Loan();
-        loan.setId(1L);
-
-        when(loanRepository.save(any())).thenReturn(loan);
-
-        // run method
         Loan result = loanService.borrow(1L, 5L, 7);
 
         // verify
         assertNotNull(result);
+        assertEquals(1L, result.getUserId());
+        assertEquals(5L, result.getBookId());
+        assertEquals(5L, result.getActiveBookId());
+        assertEquals(LocalDate.now(), result.getLoanDate());
+        assertEquals(LocalDate.now().plusDays(7), result.getDueDate());
+        assertNull(result.getReturnDate());
 
         verify(userClient).assertUserExists(1L);   // verify the process, log check
         verify(bookClient).assertBookExists(5L);
-        verify(loanRepository).save(any());               // verify the result, log check
+        verify(loanRepository).findByBookIdAndReturnDateIsNull(5L);
+        verify(loanRepository).saveAndFlush(any(Loan.class));
     }
 
     @Test
@@ -74,7 +81,7 @@ public class LoanServiceTest {
 
         verify(userClient).assertUserExists(1L);
         verify(bookClient).assertBookExists(5L);
-        verify(loanRepository, times(0)).save(any());
+        verify(loanRepository, never()).saveAndFlush(any(Loan.class));
     }
 
     @Test
@@ -100,7 +107,32 @@ public class LoanServiceTest {
         verify(userClient).assertUserExists(1L);
         verify(bookClient, times(0)).assertBookExists(anyLong());
         verify(loanRepository, never()).findByBookIdAndReturnDateIsNull(anyLong());
-        verify(loanRepository, never()).save(any());
+        verify(loanRepository, never()).saveAndFlush(any(Loan.class));
+    }
+
+    @Test
+    void borrow_shouldFail_whenUserServiceIsUnavailable() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        doThrow(new DownstreamServiceException("User service is unavailable"))
+                .when(userClient).assertUserExists(1L);
+
+        DownstreamServiceException ex = assertThrows(
+                DownstreamServiceException.class,
+                () -> loanService.borrow(1L, 5L, 7)
+        );
+
+        assertEquals("User service is unavailable", ex.getMessage());
+
+        verify(userClient).assertUserExists(1L);
+        verify(bookClient, never()).assertBookExists(anyLong());
+        verify(loanRepository, never()).findByBookIdAndReturnDateIsNull(anyLong());
+        verify(loanRepository, never()).saveAndFlush(any(Loan.class));
+
     }
 
     @Test
@@ -123,7 +155,61 @@ public class LoanServiceTest {
         verify(userClient).assertUserExists(1L);
         verify(bookClient).assertBookExists(5L);
         verify(loanRepository, never()).findByBookIdAndReturnDateIsNull(anyLong());
-        verify(loanRepository, never()).save(any());
+        verify(loanRepository, never()).saveAndFlush(any(Loan.class));
+    }
+
+    @Test
+    void borrow_shouldFail_whenBookServiceIsUnavailable() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        doThrow(new DownstreamServiceException("Book service is unavailable"))
+                .when(bookClient).assertBookExists(5L);
+
+        DownstreamServiceException ex = assertThrows(
+                DownstreamServiceException.class,
+                () -> loanService.borrow(1L, 5L, 7)
+        );
+
+        assertEquals("Book service is unavailable", ex.getMessage());
+
+        verify(userClient).assertUserExists(1L);
+        verify(bookClient).assertBookExists(5L);
+
+        verify(loanRepository, never()).findByBookIdAndReturnDateIsNull(anyLong());
+        verify(loanRepository, never()).saveAndFlush(any(Loan.class));
+    }
+
+    @Test
+    void borrow_shouldThrowConflictException_whenDataBaseRejectsDuplicateActiveLoan() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        when(loanRepository.findByBookIdAndReturnDateIsNull(5L))
+                .thenReturn(Optional.empty());
+
+        when(loanRepository.saveAndFlush(any(Loan.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "Duplicate active_book_id"
+                ));
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> loanService.borrow(1L, 5L, 7)
+        );
+
+        assertEquals("Book is not available", ex.getMessage());
+
+        verify(userClient).assertUserExists(1L);
+        verify(bookClient).assertBookExists(5L);
+        verify(loanRepository).findByBookIdAndReturnDateIsNull(5L);
+        verify(loanRepository).saveAndFlush(any(Loan.class));
     }
 
     @Test
@@ -140,6 +226,8 @@ public class LoanServiceTest {
         activeLoan.setId(1L);
         activeLoan.setUserId(1L);
         activeLoan.setBookId(5L);
+        activeLoan.setActiveBookId(5L);
+        activeLoan.setReturnDate(null);
         // check
         when(loanRepository.findByUserIdAndBookIdAndReturnDateIsNull(1L, 5L))
                 .thenReturn(Optional.of(activeLoan));
@@ -150,6 +238,7 @@ public class LoanServiceTest {
 
         assertNotNull(result);
         assertNotNull(result.getReturnDate());
+        assertNull(result.getActiveBookId());
 
         verify(loanRepository).findByUserIdAndBookIdAndReturnDateIsNull(1L, 5L);
         verify(loanRepository).save(activeLoan);
@@ -194,7 +283,7 @@ public class LoanServiceTest {
         activeLoan2.setId(2L);
         activeLoan2.setUserId(1L);
         activeLoan2.setBookId(6L);
-        activeLoan1.setDueDate(LocalDate.of(2026, 1, 2));
+        activeLoan2.setDueDate(LocalDate.of(2026, 1, 2));
         activeLoan2.setReturnDate(null);
 
         List<Loan> activeLoans = Arrays.asList(activeLoan1, activeLoan2);
@@ -208,7 +297,41 @@ public class LoanServiceTest {
         assertEquals(activeLoans.size(), result.size());
         assertEquals(activeLoans, result);
 
+        verify(userClient).assertUserExists(1L);
         verify(loanRepository).findByUserIdAndReturnDateIsNullOrderByDueDateAsc(1L);
+    }
+
+    @Test
+    void getActiveLoansByUser_shouldThrowException_whenUserDoesNotExist() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(
+                        loanRepository,
+                        userClient,
+                        bookClient
+                );
+
+        doThrow(new ResourceNotFoundException("User with id 1 not found"))
+                .when(userClient)
+                .assertUserExists(1L);
+
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class,
+                () -> loanService.getActiveLoansByUser(1L)
+        );
+
+        assertEquals(
+                "User with id 1 not found",
+                ex.getMessage()
+        );
+
+        verify(userClient).assertUserExists(1L);
+
+        verify(loanRepository, never())
+                .findByUserIdAndReturnDateIsNullOrderByDueDateAsc(anyLong());
     }
 
     @Test
@@ -241,7 +364,41 @@ public class LoanServiceTest {
         assertEquals(hisLoans.size(), result.size());
         assertEquals(hisLoans, result);
 
+        verify(userClient).assertUserExists(1L);
         verify(loanRepository).findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(1L);
+    }
+
+    @Test
+    void getLoanHistoryByUser_shouldThrowException_whenUserDoesNotExist() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(
+                        loanRepository,
+                        userClient,
+                        bookClient
+                );
+
+        doThrow(new ResourceNotFoundException("User with id 1 not found"))
+                .when(userClient)
+                .assertUserExists(1L);
+
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class,
+                () -> loanService.getLoanHistoryByUser(1L)
+        );
+
+        assertEquals(
+                "User with id 1 not found",
+                ex.getMessage()
+        );
+
+        verify(userClient).assertUserExists(1L);
+
+        verify(loanRepository, never())
+                .findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(anyLong());
     }
 
     @Test
@@ -258,6 +415,7 @@ public class LoanServiceTest {
 
         assertTrue(result);
 
+        verify(bookClient).assertBookExists(1L);
         verify(loanRepository).findByBookIdAndReturnDateIsNull(1L);
     }
 
@@ -280,7 +438,32 @@ public class LoanServiceTest {
         boolean result = loanService.isBookAvailable(5L);
 
         assertFalse(result);
+
+        verify(bookClient).assertBookExists(5L);
         verify(loanRepository).findByBookIdAndReturnDateIsNull(5L);
+    }
+
+    @Test
+    void isBookAvailable_shouldThrowException_whenBookDoesNotExist() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService = new LoanServiceImpl(loanRepository, userClient, bookClient);
+
+        doThrow(new ResourceNotFoundException("Book 5 not found"))
+                .when(bookClient).assertBookExists(5L);
+
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class,
+                () -> loanService.isBookAvailable(5L)
+        );
+
+        assertEquals("Book 5 not found", ex.getMessage());
+
+        verify(bookClient).assertBookExists(5L);
+        verify(loanRepository, never()).findByBookIdAndReturnDateIsNull(5L);
+        verifyNoInteractions(userClient);
     }
 
     @Test
@@ -327,6 +510,34 @@ public class LoanServiceTest {
     }
 
     @Test
+    void getRemainingDays_shouldReturnNegativeValue_whenLoanIsOverdue() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(
+                        loanRepository,
+                        userClient,
+                        bookClient
+                );
+
+        Loan loan = new Loan();
+        loan.setBookId(5L);
+        loan.setDueDate(LocalDate.now().minusDays(3));
+
+        when(loanRepository.findByBookIdAndReturnDateIsNull(5L))
+                .thenReturn(Optional.of(loan));
+
+        long result = loanService.getRemainingDays(5L);
+
+        assertEquals(-3L, result);
+
+        verify(loanRepository)
+                .findByBookIdAndReturnDateIsNull(5L);
+    }
+
+    @Test
     void getAllLoansForUser_shouldMergeActiveAndHistoryLoans() {
         LoanRepository loanRepository = mock(LoanRepository.class);
         UserClient userClient = mock(UserClient.class);
@@ -363,6 +574,45 @@ public class LoanServiceTest {
 
         verify(loanRepository).findByUserIdAndReturnDateIsNullOrderByDueDateAsc(1L);
         verify(loanRepository).findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(1L);
+        verify(userClient).assertUserExists(1L);
+    }
+
+    @Test
+    void getAllLoansForUser_shouldThrowException_whenUserDoesNotExist() {
+        LoanRepository loanRepository = mock(LoanRepository.class);
+        UserClient userClient = mock(UserClient.class);
+        BookClient bookClient = mock(BookClient.class);
+
+        LoanServiceImpl loanService =
+                new LoanServiceImpl(
+                        loanRepository,
+                        userClient,
+                        bookClient
+                );
+
+        doThrow(new ResourceNotFoundException("User with id 1 not found"))
+                .when(userClient)
+                .assertUserExists(1L);
+
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class,
+                () -> loanService.getAllLoansForUser(1L)
+        );
+
+        assertEquals(
+                "User with id 1 not found",
+                ex.getMessage()
+        );
+
+        verify(userClient).assertUserExists(1L);
+
+        verify(loanRepository, never())
+                .findByUserIdAndReturnDateIsNullOrderByDueDateAsc(anyLong());
+
+        verify(loanRepository, never())
+                .findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(anyLong());
+
+        verifyNoInteractions(bookClient);
     }
 
     @Test
@@ -405,7 +655,7 @@ public class LoanServiceTest {
     }
 
     @Test
-    void getAllLoans_shouldReturnAllLoans() {
+    void getAllLoans_shouldReturnPagedLoans() {
         LoanRepository loanRepository = mock(LoanRepository.class);
         UserClient userClient = mock(UserClient.class);
         BookClient bookClient = mock(BookClient.class);
@@ -424,25 +674,31 @@ public class LoanServiceTest {
         loan2.setBookId(6L);
         loan2.setReturnDate(LocalDate.of(2026, 7, 6));
 
-        List<Loan> historyLoans = Arrays.asList(loan1, loan2);
+        List<Loan> loans = Arrays.asList(loan1, loan2);
 
-        when(loanRepository.findAllByOrderByLoanDateDesc())
-                .thenReturn(historyLoans);
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Loan> loanPage = new PageImpl<>(loans, pageable, loans.size());
 
-        List<Loan> result = loanService.getAllLoans();
+        when(loanRepository.findAllByOrderByLoanDateDesc(pageable))
+                .thenReturn(loanPage);
+
+        Page<Loan> result = loanService.getAllLoans(0, 5);
 
         assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals(historyLoans, result);
+        assertEquals(2, result.getContent().size());
+        assertEquals(loans, result.getContent());
+        assertEquals(0, result.getNumber());
+        assertEquals(5, result.getSize());
+        assertEquals(2, result.getTotalElements());
 
-        verify(loanRepository).findAllByOrderByLoanDateDesc();
+        verify(loanRepository).findAllByOrderByLoanDateDesc(pageable);
 
         verifyNoInteractions(userClient);
         verifyNoInteractions(bookClient);
     }
 
     @Test
-    void getAllActiveLoans_shouldReturnActiveLoans() {
+    void getAllActiveLoans_shouldReturnPagedActiveLoans() {
         LoanRepository loanRepository = mock(LoanRepository.class);
         UserClient userClient = mock(UserClient.class);
         BookClient bookClient = mock(BookClient.class);
@@ -463,22 +719,27 @@ public class LoanServiceTest {
 
         List<Loan> activeLoans = Arrays.asList(loan1, loan2);
 
-        when(loanRepository.findByReturnDateIsNullOrderByDueDateAsc())
-                .thenReturn(activeLoans);
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Loan> activeLoanPage = new PageImpl<>(activeLoans, pageable, activeLoans.size());
 
-        List<Loan> result = loanService.getAllActiveLoans();
+        when(loanRepository.findByReturnDateIsNullOrderByDueDateAsc(pageable))
+                .thenReturn(activeLoanPage);
+
+        Page<Loan> result = loanService.getAllActiveLoans(0, 5);
 
         assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals(activeLoans, result);
+        assertEquals(2, result.getContent().size());
+        assertEquals(activeLoans, result.getContent());
+        assertEquals(2, result.getTotalElements());
 
-        verify(loanRepository).findByReturnDateIsNullOrderByDueDateAsc();
+        verify(loanRepository).findByReturnDateIsNullOrderByDueDateAsc(pageable);
+
         verifyNoInteractions(userClient);
         verifyNoInteractions(bookClient);
     }
 
     @Test
-    void getAllHistoryLoans_shouldReturnHistoryLoans() {
+    void getAllHistoryLoans_shouldReturnPagedHistoryLoans() {
         LoanRepository loanRepository = mock(LoanRepository.class);
         UserClient userClient = mock(UserClient.class);
         BookClient bookClient = mock(BookClient.class);
@@ -500,17 +761,21 @@ public class LoanServiceTest {
 
         List<Loan> historyLoans = Arrays.asList(loan1, loan2);
 
-        when(loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc())
-                .thenReturn(historyLoans);
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Loan> historyLoanPage = new PageImpl<>(historyLoans, pageable, historyLoans.size());
 
-        List<Loan> result = loanService.getAllHistoryLoans();
+        when(loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc(pageable))
+                .thenReturn(historyLoanPage);
+
+        Page<Loan> result = loanService.getAllHistoryLoans(0,5);
 
         assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals(historyLoans, result);
+        assertEquals(2, result.getContent().size());
+        assertEquals(historyLoans, result.getContent());
+        assertEquals(2, result.getTotalElements());
 
         verify(loanRepository)
-                .findByReturnDateIsNotNullOrderByReturnDateDesc();
+                .findByReturnDateIsNotNullOrderByReturnDateDesc(pageable);
 
         verifyNoInteractions(userClient);
         verifyNoInteractions(bookClient);

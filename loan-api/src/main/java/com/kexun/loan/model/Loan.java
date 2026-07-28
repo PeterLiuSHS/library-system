@@ -20,6 +20,9 @@ public class Loan {
     @Column(nullable = false)
     private Long bookId;  // store bookId only, do NOT reference Book entity from book-api
 
+    @Column(name = "active_book_id", unique = true)
+    private Long activeBookId;
+
     @Column(nullable = false)
     private LocalDate loanDate;  // day-level granularity
 
@@ -68,6 +71,14 @@ public class Loan {
 
     public void setBookId(Long bookId) {
         this.bookId = bookId;
+    }
+
+    public Long getActiveBookId() {
+        return activeBookId;
+    }
+
+    public void setActiveBookId(Long activeBookId) {
+        this.activeBookId = activeBookId;
     }
 
     public LocalDate getLoanDate() {

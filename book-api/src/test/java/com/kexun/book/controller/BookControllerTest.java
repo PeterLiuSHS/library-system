@@ -1,10 +1,12 @@
 package com.kexun.book.controller;
 
+import com.kexun.book.exception.DownstreamServiceException;
 import com.kexun.book.exception.GlobalExceptionHandler;
 import com.kexun.book.exception.ConflictException;
 import com.kexun.book.exception.ResourceNotFoundException;
 import com.kexun.book.model.Book;
 import com.kexun.book.service.BookService;
+import com.kexun.book.dto.BookUpdateRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -61,6 +63,34 @@ public class BookControllerTest {
                 .andExpect(jsonPath("$.author").value("Joe Smith"));
 
         verify(bookService, times(1)).create(any(Book.class));
+    }
+
+    @Test
+    void create_shouldReturnConflict_whenIsbnAlreadyExists()
+            throws Exception {
+
+        when(bookService.create(any(Book.class)))
+                .thenThrow(
+                        new ConflictException(
+                                "ISBN already exists"
+                        )
+                );
+
+        mockMvc.perform(post("/books")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "title": "Java Handbook",
+                              "author": "Joe Smith",
+                              "isbn": "123456789"
+                            }
+                            """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message")
+                        .value("ISBN already exists"));
+
+        verify(bookService).create(any(Book.class));
     }
 
     @Test
@@ -168,6 +198,51 @@ public class BookControllerTest {
     }
 
     @Test
+    void list_shouldReturnBadRequest_whenPageIsNegative()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "-1")
+                        .param("size", "5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(bookService);
+    }
+
+    @Test
+    void list_shouldReturnBadRequest_whenSizeIsZero()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "0")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(bookService);
+    }
+
+    @Test
+    void list_shouldReturnBadRequest_whenSizeExceedsMaximum()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "0")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        verifyNoInteractions(bookService);
+    }
+
+    @Test
     void delete_shouldReturnNoContent_whenBookExists() throws Exception {
 
         mockMvc.perform(delete("/books/{id}", 1L))
@@ -188,6 +263,20 @@ public class BookControllerTest {
     }
 
     @Test
+    void delete_shouldReturnServiceUnavailable_whenLoanServiceFails() throws Exception {
+
+        doThrow(new DownstreamServiceException("Loan service is unavailable"))
+                .when(bookService).delete(1L);
+
+        mockMvc.perform(delete("/books/{id}", 1L))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message").value("Loan service is unavailable"));
+
+        verify(bookService).delete(1L);
+    }
+
+    @Test
     void update_shouldReturnBook_whenRequestIsValid() throws Exception {
         Book updatedBook = new Book();
         updatedBook.setId(1L);
@@ -195,15 +284,14 @@ public class BookControllerTest {
         updatedBook.setAuthor("Joe Smith");
         updatedBook.setIsbn("123456789");
 
-        when(bookService.update(eq(1L), any(Book.class))).thenReturn(updatedBook);
+        when(bookService.update(eq(1L), any(BookUpdateRequest.class))).thenReturn(updatedBook);
 
         mockMvc.perform(put("/books/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                 "title": "Java Handbook",
-                                "author": "Joe Smith",
-                                "isbn": "123456789"
+                                "author": "Joe Smith"
                                 }"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
@@ -211,25 +299,40 @@ public class BookControllerTest {
                 .andExpect(jsonPath("$.author").value("Joe Smith"))
                 .andExpect(jsonPath("$.isbn").value("123456789"));
 
-        verify(bookService, times(1)).update(eq(1L), any(Book.class));
+        verify(bookService, times(1)).update(eq(1L), any(BookUpdateRequest.class));
     }
 
     @Test
     void update_shouldReturnNotFound_whenBookDoesNotExist() throws Exception {
         doThrow(new ResourceNotFoundException("Book 1 not found"))
-                .when(bookService).update(eq(1L), any(Book.class));
+                .when(bookService).update(eq(1L), any(BookUpdateRequest.class));
 
         mockMvc.perform(put("/books/{id}", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                 "title": "Java Handbook",
-                                "author": "Joe Smith", 
-                                "isbn": "123456789"
+                                "author": "Joe Smith"
                                 }"""))
                 .andExpect(status().isNotFound());
 
-        verify(bookService, times(1)).update(eq(1L), any(Book.class));
+        verify(bookService, times(1)).update(eq(1L), any(BookUpdateRequest.class));
+    }
+
+    @Test
+    void update_shouldReturnServiceUnavailable_whenLoanServiceFails() throws Exception {
+        doThrow(new DownstreamServiceException("Loan service is unavailable"))
+                .when(bookService).update(eq(1L), any(BookUpdateRequest.class));
+
+        mockMvc.perform(put("/books/{id}", 1L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"title": "Updated title","author": "Updated author"}"""))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message").value("Loan service is unavailable"));
+
+        verify(bookService).update(eq(1L), any(BookUpdateRequest.class));
     }
 
     @Test
@@ -247,21 +350,20 @@ public class BookControllerTest {
     @Test
     void update_shouldReturnConflict_whenBookHasActiveLoan() throws Exception {
         doThrow(new ConflictException("Book 1 has an active loan and cannot be updated"))
-                .when(bookService).update(eq(1L), any(Book.class));
+                .when(bookService).update(eq(1L), any(BookUpdateRequest.class));
 
         mockMvc.perform(put("/books/{id}", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                 "title": "Java Handbook",
-                                "author": "Joe Smith",
-                                "isbn": "123456789"
+                                "author": "Joe Smith"
                                 }
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Book 1 has an active loan and cannot be updated"));
 
-        verify(bookService).update(eq(1L), any(Book.class));
+        verify(bookService).update(eq(1L), any(BookUpdateRequest.class));
     }
 }

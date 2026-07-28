@@ -6,6 +6,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import jakarta.validation.ConstraintViolationException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -41,14 +42,35 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleConstraintViolation(
+            ConstraintViolationException ex
+    ) {
+        Map<String, String> errors = new HashMap<>();
+
+        ex.getConstraintViolations().forEach(violation -> {
+            String path = violation.getPropertyPath().toString();
+            String field = path.substring(path.lastIndexOf('.') + 1);
+
+            errors.put(field, violation.getMessage());
+        });
+
+        return new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Validation failed",
+                LocalDateTime.now(),
+                errors
+        );
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleDataIntegrity(DataIntegrityViolationException ex){
         return new ErrorResponse(
                 HttpStatus.CONFLICT.value(),
-                "Email already exists",
-                LocalDateTime.now(),
-                null
+                "Database constraint violation",
+                LocalDateTime.now()
         );
     }
 
@@ -57,6 +79,16 @@ public class GlobalExceptionHandler {
     public ErrorResponse handleConflict(ConflictException ex){
         return new ErrorResponse(
                 HttpStatus.CONFLICT.value(),
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+    }
+
+    @ExceptionHandler(DownstreamServiceException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ErrorResponse handleDownstream(DownstreamServiceException ex){
+        return new ErrorResponse(
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
                 ex.getMessage(),
                 LocalDateTime.now()
         );

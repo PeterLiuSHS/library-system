@@ -1,6 +1,7 @@
 package com.kexun.loan.service;
 
 import com.kexun.loan.model.Loan;
+import org.springframework.data.domain.Page;
 
 import java.util.List;
 
@@ -22,9 +23,9 @@ public interface LoanService {
     // check existence of active loan records
     boolean hasActiveLoans(Long userId);
     // get all active loans
-    List<Loan> getAllActiveLoans();
+    Page<Loan> getAllActiveLoans(int page, int size);
     // get all loan records
-    List<Loan> getAllLoans();
+    Page<Loan> getAllLoans(int page, int size);
     // get all historical loan records
-    List<Loan> getAllHistoryLoans();
+    Page<Loan> getAllHistoryLoans(int page, int size);
 }

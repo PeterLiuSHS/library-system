@@ -1,8 +1,10 @@
 package com.kexun.book.client;
 
 import com.kexun.book.dto.AvailabilityResponse;
+import com.kexun.book.exception.DownstreamServiceException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 @Component
@@ -19,10 +21,18 @@ public class LoanClient {
     }
 
     public boolean hasActiveLoan(Long bookId) {
-        AvailabilityResponse response = restTemplate.getForObject(
-                loanServiceBaseUrl + "/books/" + bookId + "/availability",
-                AvailabilityResponse.class);
+        try{
+            AvailabilityResponse response = restTemplate.getForObject(
+                    loanServiceBaseUrl + "/books/" + bookId + "/availability",
+                    AvailabilityResponse.class
+            );
 
-        return response != null && !response.isAvailable();
+            return response != null && !response.isAvailable();
+        } catch (RestClientException ex) {
+            throw new DownstreamServiceException(
+                    "Loan service is unavailable",
+                    ex
+            );
+        }
     }
 }

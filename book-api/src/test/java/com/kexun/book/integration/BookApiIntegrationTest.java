@@ -1,5 +1,6 @@
 package com.kexun.book.integration;
 
+import com.kexun.book.exception.DownstreamServiceException;
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
 import com.kexun.book.client.LoanClient;
@@ -97,6 +98,8 @@ public class BookApiIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("ISBN already exists"));
+
+        assertEquals(1, bookRepository.count());
     }
 
     @Test
@@ -174,10 +177,56 @@ public class BookApiIntegrationTest {
     }
 
     @Test
+    void list_shouldReturn400_whenPageIsNegative()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "-1")
+                        .param("size", "5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, bookRepository.count());
+    }
+
+    @Test
+    void list_shouldReturn400_whenSizeIsZero()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "0")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, bookRepository.count());
+    }
+
+    @Test
+    void list_shouldReturn400_whenSizeExceedsMaximum()
+            throws Exception {
+
+        mockMvc.perform(get("/books")
+                        .param("page", "0")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("Validation failed"));
+
+        assertEquals(0, bookRepository.count());
+    }
+
+    @Test
     void update_shouldModifyBookInDatabase_whenBookExists() throws Exception {
         Book book1 = new Book();
         book1.setTitle("Python HandBook");
         book1.setAuthor("David Lau");
+        book1.setPublishedYear(2020);
         book1.setIsbn("1234567890");
         Book savedBook = bookRepository.save(book1);
 
@@ -186,8 +235,7 @@ public class BookApiIntegrationTest {
         String requestBody = """
                  {
                 "title": "Python HandBook Revised Edition",
-                "author": "David Lau and Team",
-                "isbn": "1234567890"
+                "author": "David Lau and Team"
                  }
                 """;
 
@@ -201,8 +249,9 @@ public class BookApiIntegrationTest {
         Book updatedBook = bookRepository.findById(savedBook.getId()).orElseThrow();
 
         assertEquals("Python HandBook Revised Edition", updatedBook.getTitle());
-
         assertEquals("David Lau and Team", updatedBook.getAuthor());
+        assertEquals("1234567890", updatedBook.getIsbn());
+        assertEquals(2020, updatedBook.getPublishedYear());
     }
 
     @Test
@@ -210,8 +259,7 @@ public class BookApiIntegrationTest {
         String requestBody = """
                  {
                 "title": "Python HandBook Revised Edition",
-                "author": "David Lau and Team",
-                "isbn": "1234567890"
+                "author": "David Lau and Team"
                  }
                 """;
 
@@ -235,22 +283,66 @@ public class BookApiIntegrationTest {
         String requestBody = """
                 {
                 "title": "Python HandBook Revised Edition",
-                "author": "David Lau and Team",
-                "isbn": "1234567890"}
+                "author": "David Lau and Team"
+                }
                 """;
 
         mockMvc.perform(put("/books/{id}", savedBook.getId())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").
-                        value("Book "+savedBook.getId()+" has an active loan and cannot be updated"));
+                        value("Book " + savedBook.getId() + " has an active loan and cannot be updated"));
 
         Book unchangedBook = bookRepository.findById(savedBook.getId()).orElseThrow();
 
         assertEquals("Python HandBook", unchangedBook.getTitle());
         assertEquals("David Lau", unchangedBook.getAuthor());
+    }
+
+    @Test
+    void update_shouldReturn503_whenLoanServiceIsUnavailable()
+            throws Exception {
+
+        Book book = new Book();
+        book.setTitle("Python HandBook");
+        book.setAuthor("David Lau");
+        book.setIsbn("1234567890");
+        book.setPublishedYear(2020);
+
+        Book savedBook = bookRepository.save(book);
+
+        when(loanClient.hasActiveLoan(savedBook.getId()))
+                .thenThrow(
+                        new DownstreamServiceException(
+                                "Loan service is unavailable"
+                        )
+                );
+
+        String requestBody = """
+            {
+              "title": "Updated title",
+              "author": "Updated author"
+            }
+            """;
+
+        mockMvc.perform(put("/books/{id}", savedBook.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message")
+                        .value("Loan service is unavailable"));
+
+        Book unchangedBook = bookRepository
+                .findById(savedBook.getId())
+                .orElseThrow();
+
+        assertEquals("Python HandBook", unchangedBook.getTitle());
+        assertEquals("David Lau", unchangedBook.getAuthor());
+        assertEquals("1234567890", unchangedBook.getIsbn());
+        assertEquals(2020, unchangedBook.getPublishedYear());
     }
 
     @Test
@@ -282,7 +374,7 @@ public class BookApiIntegrationTest {
         mockMvc.perform(delete("/books/{id}", savedBook.getId()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.message").value("Book "+savedBook.getId()+" has an active loan and cannot be deleted"));
+                .andExpect(jsonPath("$.message").value("Book " + savedBook.getId() + " has an active loan and cannot be deleted"));
 
         assertTrue(bookRepository.findById(savedBook.getId()).isPresent());
     }
@@ -292,6 +384,28 @@ public class BookApiIntegrationTest {
         mockMvc.perform(delete("/books/{id}", 1L))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Book 1 not found"));
+    }
+
+    @Test
+    void delete_shouldReturn503_whenLoanServiceIsUnavailable() throws Exception {
+        Book book = new Book();
+        book.setTitle("Python HandBook");
+        book.setAuthor("David Lau");
+        book.setIsbn("1234567890");
+
+        Book savedBook = bookRepository.save(book);
+
+        when(loanClient.hasActiveLoan(savedBook.getId())).thenThrow(new DownstreamServiceException("Loan service is unavailable"));
+
+        mockMvc.perform(delete("/books/{id}", savedBook.getId()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message")
+                        .value("Loan service is unavailable"));
+
+        assertTrue(
+                bookRepository.findById(savedBook.getId()).isPresent()
+        );
     }
 
 }

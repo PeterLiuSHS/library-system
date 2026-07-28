@@ -6,6 +6,7 @@ import com.kexun.book.exception.ConflictException;
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
 import com.kexun.book.service.BookService;
+import com.kexun.book.dto.BookUpdateRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +25,9 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public Book create(Book book) {
+        if (bookRepository.existsByIsbn(book.getIsbn())) {
+            throw new ConflictException("ISBN already exists");
+        }
         return bookRepository.save(book);
     }
 
@@ -55,7 +59,7 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
-    public Book update(Long id, Book book) {
+    public Book update(Long id, BookUpdateRequest request) {
         Book existing = bookRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Book " + id + " not found"));
 
@@ -65,8 +69,8 @@ public class BookServiceImpl implements BookService {
             );
         }
 
-        existing.setTitle(book.getTitle());
-        existing.setAuthor(book.getAuthor());
+        existing.setTitle(request.getTitle());
+        existing.setAuthor(request.getAuthor());
 
         return bookRepository.save(existing);
     }

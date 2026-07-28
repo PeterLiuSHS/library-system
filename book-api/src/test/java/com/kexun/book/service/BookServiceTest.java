@@ -1,11 +1,13 @@
 package com.kexun.book.service;
 
 import com.kexun.book.client.LoanClient;
+import com.kexun.book.exception.DownstreamServiceException;
 import com.kexun.book.exception.ResourceNotFoundException;
 import com.kexun.book.exception.ConflictException;
 import com.kexun.book.model.Book;
 import com.kexun.book.repository.BookRepository;
 import com.kexun.book.service.impl.BookServiceImpl;
+import com.kexun.book.dto.BookUpdateRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,13 +39,37 @@ public class BookServiceTest {
     @Test
     void create_shouldSaveBook_whenBookProvided() {
         Book book = new Book();
+        book.setIsbn("123456789");
+
+        when(bookRepository.existsByIsbn("123456789")).thenReturn(false);
+
         when(bookRepository.save(book))
                 .thenReturn(book);
 
         Book result = bookService.create(book);
 
         assertEquals(book, result);
+        verify(bookRepository).existsByIsbn("123456789");
         verify(bookRepository).save(book);
+    }
+
+    @Test
+    void create_shouldThrowConflictException_whenIsbnAlreadyExists() {
+        Book book = new Book();
+        book.setIsbn("123456789");
+
+        when(bookRepository.existsByIsbn("123456789"))
+                .thenReturn(true);
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> bookService.create(book)
+        );
+
+        assertEquals("ISBN already exists", ex.getMessage());
+
+        verify(bookRepository).existsByIsbn("123456789");
+        verify(bookRepository, never()).save(any(Book.class));
     }
 
     @Test
@@ -160,14 +186,14 @@ public class BookServiceTest {
 
         when(loanClient.hasActiveLoan(1L)).thenReturn(false);
 
-        Book updatedBook = new Book();
-        updatedBook.setTitle("Java 8");
-        updatedBook.setAuthor("Joe Smith");
+        BookUpdateRequest updateRequest = new BookUpdateRequest();
+        updateRequest.setTitle("Java 8");
+        updateRequest.setAuthor("Joe Smith");
 
         when(bookRepository.save(any(Book.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Book result = bookService.update(1L, updatedBook);
+        Book result = bookService.update(1L, updateRequest);
 
         assertEquals("Java 8", result.getTitle());
         assertEquals("Joe Smith", result.getAuthor());
@@ -180,22 +206,80 @@ public class BookServiceTest {
     void update_shouldThrowConflictException_whenBookHasActiveLoan() {
         Book existingBook = new Book();
         existingBook.setId(1L);
+        existingBook.setTitle("Original title");
+        existingBook.setAuthor("Original author");
+        existingBook.setIsbn("123456789");
 
-        Book updateRequest = new Book();
+        BookUpdateRequest updateRequest = new BookUpdateRequest();
         updateRequest.setTitle("Updated title");
         updateRequest.setAuthor("Updated author");
+
+        when(bookRepository.findById(1L))
+                .thenReturn(Optional.of(existingBook));
+
+        when(loanClient.hasActiveLoan(1L)).thenReturn(true);
+
+        ConflictException ex = assertThrows(
+                ConflictException.class,
+                () -> bookService.update(1L, updateRequest)
+        );
+
+        assertEquals("Book 1 has an active loan and cannot be updated", ex.getMessage());
+
+        assertEquals("Original title", existingBook.getTitle());
+        assertEquals("Original author", existingBook.getAuthor());
+
+        verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
+        verify(bookRepository, never()).save(any(Book.class));
     }
 
     @Test
     void update_shouldThrowException_whenBookNotFound() {
+
+        BookUpdateRequest request = new BookUpdateRequest();
+        request.setTitle("Updated title");
+        request.setAuthor("Updated author");
+
         when(bookRepository.findById(1L))
                 .thenReturn(Optional.empty());
         ResourceNotFoundException ex = assertThrows(
                 ResourceNotFoundException.class,
-                () -> bookService.update(1L, new Book())
+                () -> bookService.update(1L, request)
         );
         assertEquals("Book 1 not found", ex.getMessage());
         verify(bookRepository).findById(1L);
+    }
+
+    @Test
+    void update_shouldThrowDownstreamException_whenLoanServiceIsUnavailable() {
+        Book existingBook = new Book();
+        existingBook.setId(1L);
+        existingBook.setTitle("Old title");
+        existingBook.setAuthor("Old author");
+        existingBook.setIsbn("123456789");
+
+        BookUpdateRequest request = new BookUpdateRequest();
+        request.setTitle("Updated title");
+        request.setAuthor("Updated author");
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(existingBook));
+
+        when(loanClient.hasActiveLoan(1L)).thenThrow(new DownstreamServiceException("Loan service is unavailable"));
+
+        DownstreamServiceException ex = assertThrows(
+                DownstreamServiceException.class,
+                () -> bookService.update(1L, request)
+        );
+
+        assertEquals("Loan service is unavailable", ex.getMessage());
+
+        assertEquals("Old title", existingBook.getTitle());
+        assertEquals("Old author", existingBook.getAuthor());
+
+        verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
+        verify(bookRepository, never()).save(any(Book.class));
     }
 
     @Test
@@ -248,5 +332,28 @@ public class BookServiceTest {
 
         assertEquals("Book 1 not found", ex.getMessage());
         verify(bookRepository).findById(1L);
+    }
+
+    @Test
+    void delete_shouldThrowDownstreamException_whenLoanServiceIsUnavailable() {
+        Book book = new Book();
+        book.setId(1L);
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+
+        when(loanClient.hasActiveLoan(1L)).thenThrow(
+                new DownstreamServiceException("Loan service is unavailable")
+        );
+
+        DownstreamServiceException ex = assertThrows(
+                DownstreamServiceException.class,
+                () -> bookService.delete(1L)
+        );
+
+        assertEquals("Loan service is unavailable", ex.getMessage());
+
+        verify(bookRepository).findById(1L);
+        verify(loanClient).hasActiveLoan(1L);
+        verify(bookRepository, never()).delete(any(Book.class));
     }
 }

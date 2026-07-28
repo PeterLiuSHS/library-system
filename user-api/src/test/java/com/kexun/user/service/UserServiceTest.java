@@ -3,6 +3,7 @@ package com.kexun.user.service;
 import com.kexun.user.client.LoanClient;
 import com.kexun.user.dto.UserUpdateRequest;
 import com.kexun.user.exception.ConflictException;
+import com.kexun.user.exception.DownstreamServiceException;
 import com.kexun.user.exception.ResourceNotFoundException;
 import com.kexun.user.model.User;
 import com.kexun.user.repository.UserRepository;
@@ -40,13 +41,36 @@ public class UserServiceTest {
     void create_shouldSaveUser_whenUserProvided() {
 
         User user = new User();
+        user.setEmail("alice@example.com");
+
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+
         when(userRepository.save(user))
                 .thenReturn(user);
 
         User result = userService.create(user);
 
         assertEquals(user, result);
+        verify(userRepository).existsByEmail("alice@example.com");
         verify(userRepository).save(user);
+        verifyNoInteractions(loanClient);
+    }
+
+    @Test
+    void create_shouldThrowConflictException_whenEmailAlreadyExists() {
+        User user = new User();
+        user.setEmail("alice@example.com");
+
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+
+        ConflictException ex = assertThrows(ConflictException.class, () -> userService.create(user));
+
+        assertEquals("Email already exists", ex.getMessage());
+
+        verify(userRepository).existsByEmail("alice@example.com");
+
+        verify(userRepository, never()).save(any(User.class));
+
         verifyNoInteractions(loanClient);
     }
 
@@ -280,5 +304,46 @@ public class UserServiceTest {
         verify(userRepository).save(user);
         verify(userRepository, never()).delete(any(User.class));
         verify(userRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void delete_shouldThrowDownstreamServiceException_whenLoanServiceIsUnavailable() {
+        User user = new User();
+        user.setId(1L);
+        user.setDeleted(false);
+
+        when(userRepository.findByIdAndDeletedFalse(1L))
+                .thenReturn(Optional.of(user));
+
+        when(loanClient.hasActiveLoans(1L))
+                .thenThrow(
+                        new DownstreamServiceException(
+                                "Loan service is unavailable"
+                        )
+                );
+
+        DownstreamServiceException ex = assertThrows(
+                DownstreamServiceException.class,
+                () -> userService.delete(1L)
+        );
+
+        assertEquals(
+                "Loan service is unavailable",
+                ex.getMessage()
+        );
+
+        assertFalse(user.isDeleted());
+
+        verify(userRepository).findByIdAndDeletedFalse(1L);
+        verify(loanClient).hasActiveLoans(1L);
+
+        verify(userRepository, never())
+                .save(any(User.class));
+
+        verify(userRepository, never())
+                .delete(any(User.class));
+
+        verify(userRepository, never())
+                .deleteById(anyLong());
     }
 }

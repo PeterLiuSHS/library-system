@@ -1,10 +1,12 @@
 package com.kexun.loan.client;
 
 import com.kexun.loan.exception.ResourceNotFoundException;
+import com.kexun.loan.exception.DownstreamServiceException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 @Component  // component scan, written by myself
 public class UserClient {
@@ -26,6 +28,11 @@ public class UserClient {
                     .toBodilessEntity(); // retrieve HTTP response without reading or mapping the response body
         } catch (HttpClientErrorException.NotFound ex){  // HttpClientErrorException is defined by Spring framework
             throw new ResourceNotFoundException("User with id " + userId + " not found");
+        } catch (RestClientException ex) {
+            throw new DownstreamServiceException(
+                    "User service is unavailable",
+                    ex
+            );
         }
     }
 }

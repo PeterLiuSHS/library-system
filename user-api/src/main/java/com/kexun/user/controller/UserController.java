@@ -4,6 +4,9 @@ import com.kexun.user.dto.UserUpdateRequest;
 import com.kexun.user.model.User;
 import com.kexun.user.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/users")
+@Validated
 public class UserController {
     private final UserService userService;
 
@@ -32,8 +36,15 @@ public class UserController {
     @GetMapping
     public Page<User> list(
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "5") int size
+
+            @RequestParam(defaultValue = "0")
+            @Min(value = 0, message = "Page must be zero or greater")
+            int page,
+
+            @RequestParam(defaultValue = "5")
+            @Min(value = 1, message = "Size must be at least 1")
+            @Max(value = 100, message = "Size must not exceed 100")
+            int size
     ){
         return userService.list(search, page, size);
     }

@@ -2,6 +2,8 @@ package com.kexun.loan.repository;
 
 import com.kexun.loan.model.Loan;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 import java.util.List;
@@ -14,13 +16,13 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     List<Loan> findByUserIdAndReturnDateIsNullOrderByDueDateAsc(Long userId);
 
     // get all active records
-    List<Loan> findByReturnDateIsNullOrderByDueDateAsc();
+    Page<Loan> findByReturnDateIsNullOrderByDueDateAsc(Pageable pageable);
 
     // get all historical records
-    List<Loan> findByReturnDateIsNotNullOrderByReturnDateDesc();
+    Page<Loan> findByReturnDateIsNotNullOrderByReturnDateDesc(Pageable pageable);
 
     // get all records = active + historical
-    List<Loan> findAllByOrderByLoanDateDesc();
+    Page<Loan> findAllByOrderByLoanDateDesc(Pageable pageable);
 
     // generated for return-book action
     Optional<Loan> findByUserIdAndBookIdAndReturnDateIsNull(Long userId, Long bookId);

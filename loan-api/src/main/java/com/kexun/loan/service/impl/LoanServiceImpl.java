@@ -6,7 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kexun.loan.client.BookClient;
 import com.kexun.loan.client.UserClient;
@@ -30,6 +35,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public Loan borrow(Long userId, Long bookId, int days) {
         userClient.assertUserExists(userId);
         bookClient.assertBookExists(bookId);
@@ -44,15 +50,22 @@ public class LoanServiceImpl implements LoanService {
         Loan loan = new Loan();
         loan.setUserId(userId);
         loan.setBookId(bookId);
+        loan.setActiveBookId(bookId);
+
         // freeze current time
         LocalDate today = LocalDate.now();
         loan.setLoanDate(today);
         loan.setDueDate(today.plusDays(days));
         loan.setReturnDate(null);
-        return loanRepository.save(loan);
+        try {
+            return loanRepository.saveAndFlush(loan);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Book is not available");
+        }
     }
 
     @Override
+    @Transactional
     public Loan returnBook(Long userId, Long bookId) {
         Loan loan = loanRepository
                 .findByUserIdAndBookIdAndReturnDateIsNull(userId, bookId)
@@ -60,23 +73,31 @@ public class LoanServiceImpl implements LoanService {
                         -> new ResourceNotFoundException("Active loan not found for user " + userId + " and book " + bookId));
 
         loan.setReturnDate(LocalDate.now());
+        loan.setActiveBookId(null);
+
         return loanRepository.save(loan);
     }
 
     @Override
     public List<Loan> getActiveLoansByUser(Long userId) {
+        userClient.assertUserExists(userId);
+
         return loanRepository
                 .findByUserIdAndReturnDateIsNullOrderByDueDateAsc(userId);
     }
 
     @Override
     public List<Loan> getLoanHistoryByUser(Long userId) {
+        userClient.assertUserExists(userId);
+
         return loanRepository
                 .findByUserIdAndReturnDateIsNotNullOrderByReturnDateDesc(userId);
     }
 
     @Override
     public boolean isBookAvailable(Long bookId) {
+        bookClient.assertBookExists(bookId);
+
         return loanRepository
                 .findByBookIdAndReturnDateIsNull(bookId)
                 .isEmpty();  // if the value doesn't exist, return true
@@ -84,19 +105,18 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public long getRemainingDays(Long bookId) {
-        // Optional<Loan> loan =
-        //        loanRepository.findByBookIdAndReturnDateIsNull(bookId);
 
         Loan loan = loanRepository.findByBookIdAndReturnDateIsNull(bookId)
                 .orElseThrow(() -> new ResourceNotFoundException("Active loan not found for book " + bookId));
-        // .orElseThrow() will unwrap the Optional<Loan> object
-        // so for loan.getDueDate(), should not add .get() between loan and getDueDate()
+
         LocalDate dueDate = loan.getDueDate();
         return ChronoUnit.DAYS.between(LocalDate.now(), dueDate);  // ChronoUnit.DAYS.between(start, end);
     }
 
     @Override
     public List<Loan> getAllLoansForUser(Long userId) {
+        userClient.assertUserExists(userId);
+
         List<Loan> active = loanRepository
                 .findByUserIdAndReturnDateIsNullOrderByDueDateAsc(userId);
         List<Loan> history = loanRepository
@@ -112,17 +132,22 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    public List<Loan> getAllLoans() {
-        return loanRepository.findAllByOrderByLoanDateDesc();
+    public Page<Loan> getAllLoans(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        return loanRepository.findAllByOrderByLoanDateDesc(pageable);
     }
 
     @Override
-    public List<Loan> getAllActiveLoans() {
-        return loanRepository.findByReturnDateIsNullOrderByDueDateAsc();
+    public Page<Loan> getAllActiveLoans(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        return loanRepository.findByReturnDateIsNullOrderByDueDateAsc(pageable);
     }
 
     @Override
-    public List<Loan> getAllHistoryLoans() {
-        return loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc();
+    public Page<Loan> getAllHistoryLoans(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return loanRepository.findByReturnDateIsNotNullOrderByReturnDateDesc(pageable);
     }
 }

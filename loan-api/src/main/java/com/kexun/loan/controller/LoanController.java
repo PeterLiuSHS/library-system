@@ -5,13 +5,18 @@ import com.kexun.loan.dto.BorrowRequest;
 import com.kexun.loan.model.Loan;
 import com.kexun.loan.service.LoanService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
 
 import java.util.List;
 
 @RestController
 @RequestMapping
+@Validated
 public class LoanController {
 
     private final LoanService loanService;
@@ -68,18 +73,46 @@ public class LoanController {
     }
 
     @GetMapping("/loans")
-    public List<Loan> getAllLoans() {
-        return loanService.getAllLoans();
+    public Page<Loan> getAllLoans(
+            @RequestParam(defaultValue = "0")
+            @Min(value = 0, message = "Page must be zero or greater")
+            int page,
+
+            @RequestParam(defaultValue = "5")
+            @Min(value = 1, message = "Size must be at least 1")
+            @Max(value = 100, message = "Size must not exceed 100")
+            int size
+    ) {
+        return loanService.getAllLoans(page, size);
     }
 
     @GetMapping("/loans/active")
-    public List<Loan> getAllActiveLoans() {
-        return loanService.getAllActiveLoans();
+    public Page<Loan> getAllActiveLoans(
+            @RequestParam(defaultValue = "0")
+            @Min(value = 0, message = "Page must be zero or greater")
+            int page,
+
+            @RequestParam(defaultValue = "5")
+            @Min(value = 1, message = "Size must be at least 1")
+            @Max(value = 100, message = "Size must not exceed 100")
+            int size
+    ) {
+        return loanService.getAllActiveLoans(page, size);
     }
 
     @GetMapping("/loans/history")
-    public List<Loan> getHistoryLoans() {
-        return loanService.getAllHistoryLoans();
+    public Page<Loan> getHistoryLoans(
+            @RequestParam(defaultValue = "0")
+            @Min(value = 0, message = "Page must be zero or greater")
+            int page,
+
+
+            @RequestParam(defaultValue = "5")
+            @Min(value = 1, message = "Size must be at least 1")
+            @Max(value = 100, message = "Size must not exceed 100")
+            int size
+    ) {
+        return loanService.getAllHistoryLoans(page, size);
     }
 
 
