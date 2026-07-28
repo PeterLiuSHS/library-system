@@ -53,7 +53,7 @@ function LoansPage() {
     );
   }
 
-  function handleAminPageChange(newPage) {
+  function handleAdminPageChange(newPage) {
     dispatch(
       fetchAdminLoans({
         filter: adminFilter,
@@ -91,7 +91,7 @@ function LoansPage() {
 
       dispatch(fetchLoansByUser(borrowData.userId));
       dispatch(
-        fetchAdminActiveLoans({
+        fetchAdminLoans({
           filter: adminFilter,
           page: 0,
           size: adminSize,
@@ -105,7 +105,7 @@ function LoansPage() {
         bookId: "",
         days: "15",
       });
-    } catch (error) {}
+    } catch {}
   }
 
   async function handleReturn(userId, bookId) {
@@ -123,7 +123,7 @@ function LoansPage() {
           size: adminSize,
         }),
       );
-    } catch (error) {
+    } catch {
       // The rejected action stores the error in Redux.
     }
   }

@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 const API_BASE_URL = "";
 
-export function getErrorMessage(response, fallbackMessage) {
+export async function getErrorMessage(response, fallbackMessage) {
   try{
     const errorData = await response.json();
     return errorData.message || fallbackMessage;
@@ -61,7 +61,12 @@ export const returnBook = createAsyncThunk(
     );
 
     if (!response.ok) {
-      throw new Error("Failed to return book");
+      const message = await getErrorMessage(
+        response,
+        "Failed to return book",
+      );
+
+      throw new Error(message);
     }
 
     return await response.json();
@@ -88,7 +93,7 @@ export const fetchAdminLoans = createAsyncThunk(
       size: String(size),
     });
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}?{params.toString()}`,);
+    const response = await fetch(`${API_BASE_URL}${endpoint}?${params.toString()}`,);
 
     if (!response.ok){
       const message = await getErrorMessage(

@@ -56,7 +56,7 @@ export const createBook = createAsyncThunk(
 
 export const updateBook = createAsyncThunk(
   "books/updateBook",
-  async ({ bookId, title, author, isbn, publishedYear }) => {
+  async ({ bookId, title, author }) => {
     const response = await fetch(`${API_BASE_URL}/books/${bookId}`, {
       method: "PUT",
       headers: {
@@ -65,8 +65,6 @@ export const updateBook = createAsyncThunk(
       body: JSON.stringify({
         title,
         author,
-        isbn,
-        publishedYear,
       }),
     });
 
@@ -164,9 +162,9 @@ const booksSlice = createSlice({
         state.actionStatus = "loading";
         state.actionError = null;
       })
-      .addCase(createBook.fulfilled, (state, action) => {
+      .addCase(createBook.fulfilled, (state) => {
         state.actionStatus = "succeeded";
-        state.actionError = action.error.null;
+        state.actionError = null;
       })
       .addCase(createBook.rejected, (state, action) => {
         state.actionStatus = "failed";
@@ -190,17 +188,15 @@ const booksSlice = createSlice({
         state.actionError = action.error.message;
       })
 
-      .addCase(deleteBook.pending, (state)=> {
-        state.actionStatus="loading";
+      .addCase(deleteBook.pending, (state) => {
+        state.actionStatus = "loading";
         state.actionError = null;
       })
       .addCase(deleteBook.fulfilled, (state, action) => {
         state.actionStatus = "succeeded";
         state.actionError = null;
 
-        state.items = state.items.filter(
-          (book) => book.id !== action.payload,
-        );
+        state.items = state.items.filter((book) => book.id !== action.payload);
 
         delete state.availabilityByBookId[action.payload];
       })
@@ -209,12 +205,18 @@ const booksSlice = createSlice({
         state.actionError = action.error.message;
       })
 
+      .addCase(checkBookAvailability.pending, (state) => {
+        state.actionError = null;
+      })
       .addCase(checkBookAvailability.fulfilled, (state, action) => {
         const { bookId, availability } = action.payload;
         state.availabilityByBookId[bookId] = availability;
+      })
+      .addCase(checkBookAvailability, rejected, (state, action) => {
+        state.actionError = action.error.message;
       });
   },
 });
 
-export const {clearBookActionError} = booksSlice.actions;
+export const { clearBookActionError } = booksSlice.actions;
 export default booksSlice.reducer;

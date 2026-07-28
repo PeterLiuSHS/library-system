@@ -78,7 +78,7 @@ function UsersPage() {
           size,
         }),
       );
-    } catch (error) {}
+    } catch {}
   }
 
   function handleSearch(event) {
@@ -140,7 +140,7 @@ function UsersPage() {
 
       setEditingUserId(null);
       setEditingName("");
-    } catch (error) {}
+    } catch {}
   }
 
   async function handleDelete(userId) {
@@ -155,14 +155,16 @@ function UsersPage() {
     try {
       await dispatch(deleteUser(userId)).unwrap();
 
+      const shouldGoToPreviousPage = users.length === 1 && page > 0;
+
       dispatch(
         fetchUsers({
           search,
-          page,
+          page: shouldGoToPreviousPage ? page - 1 : page,
           size,
         }),
       );
-    } catch (error) {}
+    } catch {}
   }
 
   function formatDateTime(dateTime) {
@@ -214,7 +216,7 @@ function UsersPage() {
         <h3>Search Users</h3>
 
         <input
-          placeholder="Search by name or eamail"
+          placeholder="Search by name or email"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />

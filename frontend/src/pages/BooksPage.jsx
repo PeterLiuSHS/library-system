@@ -23,6 +23,22 @@ function formatDateTime(dateTime) {
   });
 }
 
+function formatAvailability(availability){
+  if (availability.available){
+    return "Available";
+  }
+
+  if (availability.remainingDays>0){
+    return `Not available, ${availability.remainingDays} days(s) remaining`;
+  }
+
+  if (availability.remainingDays ===0){
+    return "Not available, due today";
+  }
+
+  return `Not available, overdue by ${Math.abs(availability.remainingDays)} day(s)`;
+}
+
 function BooksPage() {
   const dispatch = useDispatch();
 
@@ -105,7 +121,7 @@ function BooksPage() {
           size,
         }),
       );
-    } catch (error) {
+    } catch {
       // There is .addCase(createBook.rejected, xxx) in booksSlice already
       // so Redux has stored the error handling logic
     }
@@ -173,10 +189,6 @@ function BooksPage() {
           bookId: book.id,
           title: editingTitle,
           author: editingAuthor,
-          // the backend currently will not update following two fields,
-          // but the request body still includes their original values
-          isbn: book.isbn,
-          publishedYear: book.publishedYear,
         }),
       ).unwrap();
 
@@ -220,7 +232,7 @@ function BooksPage() {
 
         <p className="form-notice">
           ISBN and published year are permanent after creation.
-          Pleas check them carefully before submitting.
+          Please check them carefully before submitting.
         </p>
 
         <input
@@ -352,9 +364,7 @@ function BooksPage() {
 
                       {availabilityByBookId[book.id] && (
                         <span className="availability-text">
-                          {availabilityByBookId[book.id].available
-                            ? "Available"
-                            : `Not available, ${availabilityByBookId[book.id].remainingDays} days remaining`}
+                          {formatAvailability(availabilityByBookId[book.id])}
                         </span>
                       )}
                     </td>
