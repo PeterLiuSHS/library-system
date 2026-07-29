@@ -212,7 +212,7 @@ const booksSlice = createSlice({
         const { bookId, availability } = action.payload;
         state.availabilityByBookId[bookId] = availability;
       })
-      .addCase(checkBookAvailability, rejected, (state, action) => {
+      .addCase(checkBookAvailability.rejected, (state, action) => {
         state.actionError = action.error.message;
       });
   },

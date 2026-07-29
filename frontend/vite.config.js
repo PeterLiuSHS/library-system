@@ -11,4 +11,10 @@ export default defineConfig({
       "/loans": "http://localhost:9000",
     },
   },
+
+  test: {
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.js",
+    globals: true,
+  },
 });

@@ -29,7 +29,7 @@ function formatAvailability(availability){
   }
 
   if (availability.remainingDays>0){
-    return `Not available, ${availability.remainingDays} days(s) remaining`;
+    return `Not available, ${availability.remainingDays} day(s) remaining`;
   }
 
   if (availability.remainingDays ===0){
